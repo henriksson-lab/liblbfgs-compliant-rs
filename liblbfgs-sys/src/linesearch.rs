@@ -214,7 +214,7 @@ pub fn line_search_backtracking(
     xp: &[f64],
     _gp: &[f64],
     _wa: &mut [f64],
-    eval_fn: &mut dyn FnMut(&[f64], &mut [f64], f64) -> f64,
+    eval_fn: &mut impl FnMut(&[f64], &mut [f64], f64) -> f64,
     param: &InternalParam,
 ) -> i32 {
     let mut count = 0i32;
@@ -240,37 +240,31 @@ pub fn line_search_backtracking(
         *f = eval_fn(x, g, *stp);
         count += 1;
 
+        let width;
         if *f > finit + *stp * dgtest {
-            let _width = dec;
+            width = dec;
         } else {
+            // Sufficient decrease (Armijo) condition satisfied.
             if param.linesearch == LBFGS_LINESEARCH_BACKTRACKING_ARMIJO as i32 {
                 return count;
             }
+
+            // Check Wolfe condition.
             let dg = vecdot(g, s);
             if dg < param.wolfe * dginit {
-                // curvature too weak
+                width = inc;
             } else {
                 if param.linesearch == LBFGS_LINESEARCH_BACKTRACKING_WOLFE as i32 {
                     return count;
                 }
+                // Check strong Wolfe condition.
                 if dg > -param.wolfe * dginit {
-                    // strong wolfe not satisfied
+                    width = dec;
                 } else {
                     return count;
                 }
             }
         }
-
-        let width = if *f > finit + *stp * dgtest {
-            dec
-        } else {
-            let dg = vecdot(g, s);
-            if dg < param.wolfe * dginit {
-                inc
-            } else {
-                dec
-            }
-        };
 
         if *stp < param.min_step {
             return LBFGSERR_MINIMUMSTEP;
@@ -300,7 +294,7 @@ pub fn line_search_backtracking_owlqn(
     xp: &[f64],
     gp: &[f64],
     wp: &mut [f64],
-    eval_fn: &mut dyn FnMut(&[f64], &mut [f64], f64) -> f64,
+    eval_fn: &mut impl FnMut(&[f64], &mut [f64], f64) -> f64,
     param: &InternalParam,
 ) -> i32 {
     let mut count = 0i32;
@@ -365,7 +359,7 @@ pub fn line_search_morethuente(
     xp: &[f64],
     _gp: &[f64],
     _wa: &mut [f64],
-    eval_fn: &mut dyn FnMut(&[f64], &mut [f64], f64) -> f64,
+    eval_fn: &mut impl FnMut(&[f64], &mut [f64], f64) -> f64,
     param: &InternalParam,
 ) -> i32 {
     let mut count = 0i32;

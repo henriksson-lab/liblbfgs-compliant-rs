@@ -56,26 +56,18 @@ impl Default for InternalParam {
     }
 }
 
-/// Type for line search function dispatch.
-type LineSearchFn = fn(
-    usize,
-    &mut [f64],
-    &mut f64,
-    &mut [f64],
-    &mut [f64],
-    &mut f64,
-    &[f64],
-    &[f64],
-    &mut [f64],
-    &mut dyn FnMut(&[f64], &mut [f64], f64) -> f64,
-    &InternalParam,
-) -> i32;
+#[derive(Copy, Clone)]
+enum LineSearchMethod {
+    MoreThuente,
+    Backtracking,
+    BacktrackingOwlqn,
+}
 
 /// Main L-BFGS optimization — safe Rust API with closures.
 pub fn lbfgs_impl_safe(
     x: &mut [f64],
     out_fx: &mut f64,
-    mut evaluate: impl FnMut(&[f64], f64) -> (f64, Vec<f64>),
+    mut evaluate: impl FnMut(&[f64], &mut [f64], f64) -> f64,
     mut progress: Option<&mut dyn FnMut(&crate::ProgressReport) -> bool>,
     input_param: &InternalParam,
 ) -> i32 {
@@ -86,12 +78,9 @@ pub fn lbfgs_impl_safe(
     let mut param = *input_param;
     let m = param.m as usize;
 
-    // Wrap the user's evaluate closure into the form line search expects:
-    // fn(x, g, step) -> fx  (writes gradient into g)
+    // The evaluate closure already writes gradient into the buffer directly.
     let mut eval_fn = |x_slice: &[f64], g_slice: &mut [f64], step: f64| -> f64 {
-        let (fx, grad) = evaluate(x_slice, step);
-        g_slice[..grad.len()].copy_from_slice(&grad);
-        fx
+        evaluate(x_slice, g_slice, step)
     };
 
     // Check input parameters for errors.
@@ -146,11 +135,11 @@ pub fn lbfgs_impl_safe(
     }
 
     // Select line search method.
-    let linesearch: LineSearchFn;
+    let ls_method;
     if param.orthantwise_c != 0.0 {
         match param.linesearch as u32 {
             LBFGS_LINESEARCH_BACKTRACKING => {
-                linesearch = line_search_backtracking_owlqn;
+                ls_method = LineSearchMethod::BacktrackingOwlqn;
             }
             _ => {
                 return LBFGSERR_INVALID_LINESEARCH;
@@ -159,12 +148,12 @@ pub fn lbfgs_impl_safe(
     } else {
         match param.linesearch as u32 {
             LBFGS_LINESEARCH_MORETHUENTE => {
-                linesearch = line_search_morethuente;
+                ls_method = LineSearchMethod::MoreThuente;
             }
             LBFGS_LINESEARCH_BACKTRACKING_ARMIJO
             | LBFGS_LINESEARCH_BACKTRACKING_WOLFE
             | LBFGS_LINESEARCH_BACKTRACKING_STRONG_WOLFE => {
-                linesearch = line_search_backtracking;
+                ls_method = LineSearchMethod::Backtracking;
             }
             _ => {
                 return LBFGSERR_INVALID_LINESEARCH;
@@ -253,23 +242,32 @@ pub fn lbfgs_impl_safe(
         veccpy(&mut xp, x);
         veccpy(&mut gp, &g);
 
-        let ls = if param.orthantwise_c == 0.0 {
-            linesearch(
-                n, x, &mut fx, &mut g, &mut d, &mut step, &xp, &gp, &mut w,
-                &mut eval_fn, &param,
-            )
-        } else {
-            let ls = linesearch(
-                n, x, &mut fx, &mut g, &mut d, &mut step, &xp, &pg, &mut w,
-                &mut eval_fn, &param,
-            );
-            owlqn_pseudo_gradient(
-                &mut pg, x, &g, n,
-                param.orthantwise_c,
-                param.orthantwise_start as usize,
-                param.orthantwise_end as usize,
-            );
-            ls
+        let ls = match ls_method {
+            LineSearchMethod::MoreThuente => {
+                line_search_morethuente(
+                    n, x, &mut fx, &mut g, &mut d, &mut step, &xp, &gp, &mut w,
+                    &mut eval_fn, &param,
+                )
+            }
+            LineSearchMethod::Backtracking => {
+                line_search_backtracking(
+                    n, x, &mut fx, &mut g, &mut d, &mut step, &xp, &gp, &mut w,
+                    &mut eval_fn, &param,
+                )
+            }
+            LineSearchMethod::BacktrackingOwlqn => {
+                let ls = line_search_backtracking_owlqn(
+                    n, x, &mut fx, &mut g, &mut d, &mut step, &xp, &pg, &mut w,
+                    &mut eval_fn, &param,
+                );
+                owlqn_pseudo_gradient(
+                    &mut pg, x, &g, n,
+                    param.orthantwise_c,
+                    param.orthantwise_start as usize,
+                    param.orthantwise_end as usize,
+                );
+                ls
+            }
         };
 
         if ls < 0 {
@@ -353,8 +351,12 @@ pub fn lbfgs_impl_safe(
             it.alpha = vecdot(&it.s, &d);
             it.alpha /= it.ys;
             let alpha = it.alpha;
-            for idx in 0..n {
-                d[idx] += -alpha * it.y[idx];
+            unsafe {
+                let dp = d.as_mut_ptr();
+                let yp = it.y.as_ptr();
+                for idx in 0..n {
+                    *dp.add(idx) += -alpha * *yp.add(idx);
+                }
             }
         }
 
@@ -364,8 +366,12 @@ pub fn lbfgs_impl_safe(
             let it = &lm[j];
             let beta = vecdot(&it.y, &d) / it.ys;
             let alpha = it.alpha;
-            for idx in 0..n {
-                d[idx] += (alpha - beta) * it.s[idx];
+            unsafe {
+                let dp = d.as_mut_ptr();
+                let sp = it.s.as_ptr();
+                for idx in 0..n {
+                    *dp.add(idx) += (alpha - beta) * *sp.add(idx);
+                }
             }
             j = (j + 1) % m;
         }

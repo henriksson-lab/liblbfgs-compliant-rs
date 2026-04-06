@@ -316,12 +316,13 @@ fn param_to_internal(p: &LbfgsParam) -> lbfgs_core::InternalParam {
 /// Run L-BFGS optimization.
 ///
 /// - `x`: initial variable values (modified in-place to the optimized solution)
-/// - `evaluate`: closure `(x, step) -> (fx, gradient)` — compute objective and gradient
+/// - `evaluate`: closure `|x: &[f64], g: &mut [f64], step: f64| -> f64` — compute objective
+///   value and write gradient into `g`. Returns the objective function value.
 /// - `progress`: optional closure receiving progress info, return `false` to cancel
 /// - `param`: optimization parameters (use `LbfgsParam::default()` for defaults)
 pub fn lbfgs(
     x: &mut [f64],
-    evaluate: impl FnMut(&[f64], f64) -> (f64, Vec<f64>),
+    evaluate: impl FnMut(&[f64], &mut [f64], f64) -> f64,
     progress: Option<&mut dyn FnMut(&ProgressReport) -> bool>,
     param: &LbfgsParam,
 ) -> Result<LbfgsResult, LbfgsError> {

@@ -15,13 +15,11 @@ fn main() {
     use std::os::raw::{c_int, c_void};
     use std::time::Instant;
 
-    // -----------------------------------------------------------------------
-    // Objective functions
-    // -----------------------------------------------------------------------
-
-    fn rosenbrock_nd(x: &[f64], _step: f64) -> (f64, Vec<f64>) {
+    fn rosenbrock_nd(x: &[f64], g: &mut [f64], _step: f64) -> f64 {
         let n = x.len();
-        let mut g = vec![0.0; n];
+        for i in 0..n {
+            g[i] = 0.0;
+        }
         let mut f = 0.0;
         for i in (0..n - 1).step_by(2) {
             let t1 = 1.0 - x[i];
@@ -30,7 +28,7 @@ fn main() {
             g[i] += -2.0 * t1 + 200.0 * t2 * (-2.0 * x[i]);
             g[i + 1] += 200.0 * t2;
         }
-        (f, g)
+        f
     }
 
     unsafe extern "C" fn c_rosenbrock_nd(
@@ -43,23 +41,8 @@ fn main() {
         let n = n as usize;
         let xs = std::slice::from_raw_parts(x, n);
         let gs = std::slice::from_raw_parts_mut(g, n);
-        for i in 0..n {
-            gs[i] = 0.0;
-        }
-        let mut f = 0.0;
-        for i in (0..n - 1).step_by(2) {
-            let t1 = 1.0 - xs[i];
-            let t2 = xs[i + 1] - xs[i] * xs[i];
-            f += t1 * t1 + 100.0 * t2 * t2;
-            gs[i] += -2.0 * t1 + 200.0 * t2 * (-2.0 * xs[i]);
-            gs[i + 1] += 200.0 * t2;
-        }
-        f
+        rosenbrock_nd(xs, gs, 0.0)
     }
-
-    // -----------------------------------------------------------------------
-    // Benchmark helpers
-    // -----------------------------------------------------------------------
 
     fn make_initial(n: usize) -> Vec<f64> {
         (0..n)
@@ -110,10 +93,6 @@ fn main() {
         (total / iters, fx_out)
     }
 
-    // -----------------------------------------------------------------------
-    // Run benchmarks
-    // -----------------------------------------------------------------------
-
     println!("Performance comparison: Pure Rust vs C (libLBFGS)");
     println!("=================================================");
     println!("{:>8} {:>12} {:>12} {:>10}", "N", "Rust", "C", "Ratio");
@@ -121,14 +100,14 @@ fn main() {
 
     for &n in &[10, 100, 1000, 10000] {
         // Warmup
-        let _ = bench_rust(n, 1);
-        let _ = bench_c(n, 1);
+        let _ = bench_rust(n, 2);
+        let _ = bench_c(n, 2);
 
         let iters = match n {
             10 => 10000,
-            100 => 1000,
-            1000 => 100,
-            10000 => 10,
+            100 => 2000,
+            1000 => 200,
+            10000 => 20,
             _ => 100,
         };
 
@@ -145,7 +124,6 @@ fn main() {
             ratio,
         );
 
-        // Verify same results
         assert_eq!(
             rust_fx.to_bits(),
             c_fx.to_bits(),
