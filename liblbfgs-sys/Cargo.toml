@@ -1,0 +1,25 @@
+[package]
+name = "liblbfgs-compliant-rs"
+version = "0.1.3"
+authors = ["Messense Lv <messense@icloud.com>", "Johan Henriksson <mahogny@areta.org>"]
+description = "Faithful pure-rust version of libLBFGS"
+edition = "2018"
+license = "MIT"
+repository = "https://github.com/messense/liblbfgs-sys"
+keywords = ["lbfgs", "crfsuite"]
+readme = "README.md"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+compare-c = ["cmake"]
+
+[dependencies]
+
+[build-dependencies]
+cmake = { version = "0.1.45", optional = true }
+
+[[bench]]
+name = "compare_perf"
+harness = false
+
