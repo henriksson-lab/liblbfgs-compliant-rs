@@ -73,17 +73,18 @@ pub fn lbfgs_impl_safe(
 ) -> i32 {
     let n = x.len();
     let n_i32 = n as i32;
+    let np = n;
 
-    // Copy parameters.
     let mut param = *input_param;
     let m = param.m as usize;
 
-    // The evaluate closure already writes gradient into the buffer directly.
-    let mut eval_fn = |x_slice: &[f64], g_slice: &mut [f64], step: f64| -> f64 {
-        evaluate(x_slice, g_slice, step)
+    // Wrap evaluate: user's closure operates on original n elements,
+    // but internally we work with zero-padded arrays of size np.
+    let mut eval_fn = |xp: &[f64], gp: &mut [f64], step: f64| -> f64 {
+        evaluate(&xp[..n], &mut gp[..n], step)
     };
 
-    // Check input parameters for errors.
+    // --- Parameter validation ---
     if n_i32 <= 0 {
         return LBFGSERR_INVALID_N;
     }
@@ -134,16 +135,14 @@ pub fn lbfgs_impl_safe(
         return LBFGSERR_INVALID_ORTHANTWISE_END;
     }
 
-    // Select line search method.
+    // --- Select line search method ---
     let ls_method;
     if param.orthantwise_c != 0.0 {
         match param.linesearch as u32 {
             LBFGS_LINESEARCH_BACKTRACKING => {
                 ls_method = LineSearchMethod::BacktrackingOwlqn;
             }
-            _ => {
-                return LBFGSERR_INVALID_LINESEARCH;
-            }
+            _ => return LBFGSERR_INVALID_LINESEARCH,
         }
     } else {
         match param.linesearch as u32 {
@@ -155,56 +154,50 @@ pub fn lbfgs_impl_safe(
             | LBFGS_LINESEARCH_BACKTRACKING_STRONG_WOLFE => {
                 ls_method = LineSearchMethod::Backtracking;
             }
-            _ => {
-                return LBFGSERR_INVALID_LINESEARCH;
-            }
+            _ => return LBFGSERR_INVALID_LINESEARCH,
         }
     }
 
-    // Allocate working space.
-    let mut xp = vec![0.0f64; n];
-    let mut g = vec![0.0f64; n];
-    let mut gp = vec![0.0f64; n];
-    let mut d = vec![0.0f64; n];
-    let mut w = vec![0.0f64; n];
+    // --- Allocate padded working space (multiples of 8 for SSE2) ---
+    let mut xw = vec![0.0f64; np]; // padded copy of x
+    xw[..n].copy_from_slice(x);
+    let mut xp = vec![0.0f64; np];
+    let mut g = vec![0.0f64; np];
+    let mut gp = vec![0.0f64; np];
+    let mut d = vec![0.0f64; np];
+    let mut w = vec![0.0f64; np];
     let mut pg = if param.orthantwise_c != 0.0 {
-        vec![0.0f64; n]
+        vec![0.0f64; np]
     } else {
         Vec::new()
     };
 
-    // Initialize limited memory storage.
     let mut lm: Vec<IterationData> = (0..m)
         .map(|_| IterationData {
             alpha: 0.0,
-            s: vec![0.0f64; n],
-            y: vec![0.0f64; n],
+            s: vec![0.0f64; np],
+            y: vec![0.0f64; np],
             ys: 0.0,
         })
         .collect();
 
-    // Allocate past function values storage.
     let mut pf = if param.past > 0 {
         vec![0.0f64; param.past as usize]
     } else {
         Vec::new()
     };
 
-    // Evaluate the function value and its gradient.
-    let mut fx = eval_fn(x, &mut g, 0.0);
+    // --- Initial evaluation ---
+    let mut fx = eval_fn(&xw, &mut g, 0.0);
 
     if param.orthantwise_c != 0.0 {
         let xnorm_l1 = owlqn_x1norm(
-            x,
-            param.orthantwise_start as usize,
-            param.orthantwise_end as usize,
+            &xw, param.orthantwise_start as usize, param.orthantwise_end as usize,
         );
         fx += xnorm_l1 * param.orthantwise_c;
         owlqn_pseudo_gradient(
-            &mut pg, x, &g, n,
-            param.orthantwise_c,
-            param.orthantwise_start as usize,
-            param.orthantwise_end as usize,
+            &mut pg, &xw, &g, n, param.orthantwise_c,
+            param.orthantwise_start as usize, param.orthantwise_end as usize,
         );
     }
 
@@ -218,7 +211,7 @@ pub fn lbfgs_impl_safe(
         vecncpy(&mut d, &pg);
     }
 
-    let mut xnorm = vec2norm(x);
+    let mut xnorm = vec2norm(&xw);
     let gnorm = if param.orthantwise_c == 0.0 {
         vec2norm(&g)
     } else {
@@ -228,76 +221,68 @@ pub fn lbfgs_impl_safe(
         xnorm = 1.0;
     }
     if gnorm / xnorm <= param.epsilon {
+        x.copy_from_slice(&xw[..n]);
         *out_fx = fx;
         return LBFGS_ALREADY_MINIMIZED;
     }
 
     let mut step = vec2norminv(&d);
-
     let mut k = 1usize;
     let mut end = 0usize;
     let ret;
 
+    // --- Main loop ---
     loop {
-        veccpy(&mut xp, x);
+        veccpy(&mut xp, &xw);
         veccpy(&mut gp, &g);
 
         let ls = match ls_method {
-            LineSearchMethod::MoreThuente => {
-                line_search_morethuente(
-                    n, x, &mut fx, &mut g, &mut d, &mut step, &xp, &gp, &mut w,
-                    &mut eval_fn, &param,
-                )
-            }
-            LineSearchMethod::Backtracking => {
-                line_search_backtracking(
-                    n, x, &mut fx, &mut g, &mut d, &mut step, &xp, &gp, &mut w,
-                    &mut eval_fn, &param,
-                )
-            }
+            LineSearchMethod::MoreThuente => line_search_morethuente(
+                np, &mut xw, &mut fx, &mut g, &mut d, &mut step, &xp, &gp, &mut w,
+                &mut eval_fn, &param,
+            ),
+            LineSearchMethod::Backtracking => line_search_backtracking(
+                np, &mut xw, &mut fx, &mut g, &mut d, &mut step, &xp, &gp, &mut w,
+                &mut eval_fn, &param,
+            ),
             LineSearchMethod::BacktrackingOwlqn => {
                 let ls = line_search_backtracking_owlqn(
-                    n, x, &mut fx, &mut g, &mut d, &mut step, &xp, &pg, &mut w,
+                    np, &mut xw, &mut fx, &mut g, &mut d, &mut step, &xp, &pg, &mut w,
                     &mut eval_fn, &param,
                 );
                 owlqn_pseudo_gradient(
-                    &mut pg, x, &g, n,
-                    param.orthantwise_c,
-                    param.orthantwise_start as usize,
-                    param.orthantwise_end as usize,
+                    &mut pg, &xw, &g, n, param.orthantwise_c,
+                    param.orthantwise_start as usize, param.orthantwise_end as usize,
                 );
                 ls
             }
         };
 
         if ls < 0 {
-            veccpy(x, &xp);
+            veccpy(&mut xw, &xp);
             veccpy(&mut g, &gp);
             ret = ls;
             break;
         }
 
-        xnorm = vec2norm(x);
+        xnorm = vec2norm(&xw);
         let gnorm = if param.orthantwise_c == 0.0 {
             vec2norm(&g)
         } else {
             vec2norm(&pg)
         };
 
-        // Report progress.
+        // Progress callback (user sees original n-length slices).
         if let Some(ref mut progress_fn) = progress {
             let report = crate::ProgressReport {
-                x,
-                g: &g,
-                fx,
-                xnorm,
-                gnorm,
-                step,
+                x: &xw[..n],
+                g: &g[..n],
+                fx, xnorm, gnorm, step,
                 k: k as i32,
                 ls,
             };
             if !progress_fn(&report) {
-                ret = k as i32; // non-zero, non-error (matches C behavior)
+                ret = k as i32;
                 break;
             }
         }
@@ -326,8 +311,9 @@ pub fn lbfgs_impl_safe(
             break;
         }
 
+        // Update s and y vectors.
         let it = &mut lm[end];
-        vecdiff(&mut it.s, x, &xp);
+        vecdiff(&mut it.s, &xw, &xp);
         vecdiff(&mut it.y, &g, &gp);
 
         let ys = vecdot(&it.y, &it.s);
@@ -338,12 +324,14 @@ pub fn lbfgs_impl_safe(
         k += 1;
         end = (end + 1) % m;
 
+        // Two-loop recursion.
         if param.orthantwise_c == 0.0 {
             vecncpy(&mut d, &g);
         } else {
             vecncpy(&mut d, &pg);
         }
 
+        // First loop (backward).
         let mut j = end;
         for _i in 0..bound {
             j = (j + m - 1) % m;
@@ -354,7 +342,7 @@ pub fn lbfgs_impl_safe(
             unsafe {
                 let dp = d.as_mut_ptr();
                 let yp = it.y.as_ptr();
-                for idx in 0..n {
+                for idx in 0..np {
                     *dp.add(idx) += -alpha * *yp.add(idx);
                 }
             }
@@ -362,6 +350,7 @@ pub fn lbfgs_impl_safe(
 
         vecscale(&mut d, ys / yy);
 
+        // Second loop (forward).
         for _i in 0..bound {
             let it = &lm[j];
             let beta = vecdot(&it.y, &d) / it.ys;
@@ -369,13 +358,14 @@ pub fn lbfgs_impl_safe(
             unsafe {
                 let dp = d.as_mut_ptr();
                 let sp = it.s.as_ptr();
-                for idx in 0..n {
+                for idx in 0..np {
                     *dp.add(idx) += (alpha - beta) * *sp.add(idx);
                 }
             }
             j = (j + 1) % m;
         }
 
+        // OWL-QN direction constraint.
         if param.orthantwise_c != 0.0 {
             for i in param.orthantwise_start as usize..param.orthantwise_end as usize {
                 if d[i] * pg[i] >= 0.0 {
@@ -387,6 +377,8 @@ pub fn lbfgs_impl_safe(
         step = 1.0;
     }
 
+    // Copy result back to user's array.
+    x.copy_from_slice(&xw[..n]);
     *out_fx = fx;
     ret
 }

@@ -4,6 +4,15 @@ Faithful pure-Rust implementation of the [libLBFGS](https://github.com/chokkan/l
 
 The implementation produces **bit-exact** results matching the original C library, verified by 32 conformance tests with `f64::to_bits()` assertions.
 
+The API is based on the code from https://github.com/messense/liblbfgs-sys, so this crate should be a drop-in replacement
+
+## Precision
+
+Note that there is a feature "simd". Enabling it makes this crate produce different results from the original liblbfgs - possibly even more precise results.
+However, this depends on compiler settings, and compiler, used for liblbfgs. So SIMD is enabled by default
+
+With SIMD, this crate is about 2x as fast as the original code
+
 ## Usage
 
 Add to your `Cargo.toml`:
