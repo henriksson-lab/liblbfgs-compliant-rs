@@ -11,6 +11,11 @@ keywords = ["lbfgs", "optimization", "minimization", "quasi-newton"]
 categories = ["science", "mathematics", "algorithms"]
 readme = "README.md"
 exclude = [
+    ".claude/",
+    ".codex",
+    ".*.swp",
+    ".gitignore",
+    "Cargo.lock",
     "src/liblbfgs/",
     "CMakeLists.txt",
     "Config.cmake.in",
