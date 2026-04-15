@@ -440,6 +440,16 @@ mod compare_c {
     use std::os::raw::{c_int, c_void};
     use std::ptr;
 
+    const C_LINESEARCH_MORETHUENTE: c_int = 0;
+    const C_LINESEARCH_BACKTRACKING_WOLFE: c_int = 2;
+    const C_LINESEARCH_BACKTRACKING_STRONG_WOLFE: c_int = 3;
+
+    const C_SUCCESS: c_int = 0;
+    const C_ERR_INVALID_EPSILON: c_int = -1017;
+    const C_ERR_INVALID_MAXLINESEARCH: c_int = -1007;
+    const C_ERR_INVALID_ORTHANTWISE: c_int = -1006;
+    const C_ERR_INVALID_LINESEARCH: c_int = -1014;
+
     unsafe extern "C" fn c_rosenbrock_2d(
         _inst: *mut c_void, x: *const f64, g: *mut f64, _n: c_int, _step: f64,
     ) -> f64 {
@@ -463,7 +473,46 @@ mod compare_c {
         quadratic(std::slice::from_raw_parts(x, n), gs, 0.0)
     }
 
-    fn run_c(initial: &[f64], eval: c_ffi::lbfgs_evaluate_t, param: Option<&mut c_ffi::lbfgs_parameter_t>) -> (i32, f64, Vec<f64>) {
+    unsafe extern "C" fn c_cancel_after_three(
+        inst: *mut c_void,
+        _x: *const f64,
+        _g: *const f64,
+        _fx: f64,
+        _xnorm: f64,
+        _gnorm: f64,
+        _step: f64,
+        _n: c_int,
+        _k: c_int,
+        _ls: c_int,
+    ) -> c_int {
+        let count = &mut *(inst as *mut c_int);
+        *count += 1;
+        if *count >= 3 { 1 } else { 0 }
+    }
+
+    fn default_c_param() -> c_ffi::lbfgs_parameter_t {
+        unsafe {
+            let mut param = std::mem::MaybeUninit::<c_ffi::lbfgs_parameter_t>::uninit();
+            c_ffi::lbfgs_parameter_init(param.as_mut_ptr());
+            param.assume_init()
+        }
+    }
+
+    fn run_c(
+        initial: &[f64],
+        eval: c_ffi::lbfgs_evaluate_t,
+        param: Option<&mut c_ffi::lbfgs_parameter_t>,
+    ) -> (i32, f64, Vec<f64>) {
+        run_c_with_progress(initial, eval, None, ptr::null_mut(), param)
+    }
+
+    fn run_c_with_progress(
+        initial: &[f64],
+        eval: c_ffi::lbfgs_evaluate_t,
+        progress: c_ffi::lbfgs_progress_t,
+        instance: *mut c_void,
+        param: Option<&mut c_ffi::lbfgs_parameter_t>,
+    ) -> (i32, f64, Vec<f64>) {
         unsafe {
             let n = initial.len() as c_int;
             let x = c_ffi::lbfgs_malloc(n);
@@ -473,11 +522,19 @@ mod compare_c {
                 Some(p) => p as *mut _,
                 None => ptr::null_mut(),
             };
-            let ret = c_ffi::lbfgs(n, x, &mut fx, eval, None, ptr::null_mut(), p);
+            let ret = c_ffi::lbfgs(n, x, &mut fx, eval, progress, instance, p);
             let mut result = vec![0.0; initial.len()];
             for i in 0..initial.len() { result[i] = *x.add(i); }
             c_ffi::lbfgs_free(x);
             (ret, fx, result)
+        }
+    }
+
+    fn assert_same_solution(rr: &LbfgsResult, rx: &[f64], cret: i32, cfx: f64, cx: &[f64]) {
+        assert_eq!(cret, C_SUCCESS);
+        assert_eq!(rr.fx.to_bits(), cfx.to_bits(), "fx mismatch: rust={} c={}", rr.fx, cfx);
+        for i in 0..rx.len() {
+            assert_eq!(rx[i].to_bits(), cx[i].to_bits(), "x[{}] mismatch", i);
         }
     }
 
@@ -490,10 +547,7 @@ mod compare_c {
         // C
         let (cret, cfx, cx) = run_c(&[-1.2, 1.0], Some(c_rosenbrock_2d), None);
 
-        assert_eq!(cret, 0);
-        assert_eq!(rr.fx.to_bits(), cfx.to_bits(), "fx mismatch: rust vs C");
-        assert_eq!(rx[0].to_bits(), cx[0].to_bits(), "x[0] mismatch");
-        assert_eq!(rx[1].to_bits(), cx[1].to_bits(), "x[1] mismatch");
+        assert_same_solution(&rr, &rx, cret, cfx, &cx);
     }
 
     #[test]
@@ -503,11 +557,7 @@ mod compare_c {
 
         let (cret, cfx, cx) = run_c(&[1.0, 2.0, 3.0, 4.0], Some(c_quadratic), None);
 
-        assert_eq!(cret, 0);
-        assert_eq!(rr.fx.to_bits(), cfx.to_bits(), "fx mismatch");
-        for i in 0..4 {
-            assert_eq!(rx[i].to_bits(), cx[i].to_bits(), "x[{}] mismatch", i);
-        }
+        assert_same_solution(&rr, &rx, cret, cfx, &cx);
     }
 
     #[test]
@@ -519,10 +569,162 @@ mod compare_c {
 
         let (cret, cfx, cx) = run_c(&init, Some(c_rosenbrock_nd), None);
 
-        assert_eq!(cret, 0);
-        assert_eq!(rr.fx.to_bits(), cfx.to_bits(), "fx mismatch: rust={} c={}", rr.fx, cfx);
-        for i in 0..10 {
-            assert_eq!(rx[i].to_bits(), cx[i].to_bits(), "x[{}] mismatch", i);
-        }
+        assert_same_solution(&rr, &rx, cret, cfx, &cx);
+    }
+
+    #[test]
+    fn compare_rosenbrock_backtracking_wolfe() {
+        let rust_param = LbfgsParam {
+            linesearch: LineSearch::BacktrackingWolfe,
+            ..Default::default()
+        };
+        let mut c_param = default_c_param();
+        c_param.linesearch = C_LINESEARCH_BACKTRACKING_WOLFE;
+
+        let mut rx = vec![-1.2, 1.0];
+        let rr = lbfgs(&mut rx, rosenbrock_2d, None, &rust_param).unwrap();
+
+        let (cret, cfx, cx) = run_c(&[-1.2, 1.0], Some(c_rosenbrock_2d), Some(&mut c_param));
+
+        assert_same_solution(&rr, &rx, cret, cfx, &cx);
+    }
+
+    #[test]
+    fn compare_rosenbrock_backtracking_strong_wolfe() {
+        let rust_param = LbfgsParam {
+            linesearch: LineSearch::BacktrackingStrongWolfe,
+            ..Default::default()
+        };
+        let mut c_param = default_c_param();
+        c_param.linesearch = C_LINESEARCH_BACKTRACKING_STRONG_WOLFE;
+
+        let mut rx = vec![-1.2, 1.0];
+        let rr = lbfgs(&mut rx, rosenbrock_2d, None, &rust_param).unwrap();
+
+        let (cret, cfx, cx) = run_c(&[-1.2, 1.0], Some(c_rosenbrock_2d), Some(&mut c_param));
+
+        assert_same_solution(&rr, &rx, cret, cfx, &cx);
+    }
+
+    #[test]
+    fn compare_owlqn_quadratic() {
+        let rust_param = LbfgsParam {
+            orthantwise: Some(OrthantWise { c: 1.0, start: 0, end: -1 }),
+            linesearch: LineSearch::BacktrackingWolfe,
+            ..Default::default()
+        };
+        let mut c_param = default_c_param();
+        c_param.linesearch = C_LINESEARCH_BACKTRACKING_WOLFE;
+        c_param.orthantwise_c = 1.0;
+        c_param.orthantwise_start = 0;
+        c_param.orthantwise_end = -1;
+
+        let mut rx = vec![1.0, 2.0, 3.0, 4.0];
+        let rr = lbfgs(&mut rx, quadratic, None, &rust_param).unwrap();
+
+        let (cret, cfx, cx) = run_c(&[1.0, 2.0, 3.0, 4.0], Some(c_quadratic), Some(&mut c_param));
+
+        assert_same_solution(&rr, &rx, cret, cfx, &cx);
+    }
+
+    #[test]
+    fn compare_progress_cancellation() {
+        let mut rust_count = 0i32;
+        let mut rx = vec![-1.2, 1.0];
+        let rr = lbfgs(
+            &mut rx,
+            rosenbrock_2d,
+            Some(&mut |_| {
+                rust_count += 1;
+                rust_count < 3
+            }),
+            &LbfgsParam::default(),
+        );
+
+        let mut c_count = 0i32;
+        let (cret, cfx, cx) = run_c_with_progress(
+            &[-1.2, 1.0],
+            Some(c_rosenbrock_2d),
+            Some(c_cancel_after_three),
+            &mut c_count as *mut _ as *mut c_void,
+            None,
+        );
+
+        assert!(matches!(rr, Err(LbfgsError::Canceled)));
+        assert_eq!(rust_count, 3);
+        assert_eq!(cret, 1);
+        assert_eq!(c_count, 3);
+        assert_eq!(rx[0].to_bits(), cx[0].to_bits(), "x[0] mismatch");
+        assert_eq!(rx[1].to_bits(), cx[1].to_bits(), "x[1] mismatch");
+        let mut g = [0.0; 2];
+        assert_eq!(cfx.to_bits(), rosenbrock_2d(&cx, &mut g, 0.0).to_bits());
+    }
+
+    #[test]
+    fn compare_error_invalid_epsilon() {
+        let rust_param = LbfgsParam { epsilon: -1.0, ..Default::default() };
+        let mut c_param = default_c_param();
+        c_param.epsilon = -1.0;
+
+        let mut rx = vec![1.0, 2.0];
+        let rr = lbfgs(&mut rx, quadratic, None, &rust_param);
+        let (cret, _cfx, _cx) = run_c(&[1.0, 2.0], Some(c_quadratic), Some(&mut c_param));
+
+        assert!(matches!(rr, Err(LbfgsError::InvalidEpsilon)));
+        assert_eq!(cret, C_ERR_INVALID_EPSILON);
+    }
+
+    #[test]
+    fn compare_error_invalid_max_linesearch() {
+        let rust_param = LbfgsParam { max_linesearch: 0, ..Default::default() };
+        let mut c_param = default_c_param();
+        c_param.max_linesearch = 0;
+
+        let mut rx = vec![1.0, 2.0];
+        let rr = lbfgs(&mut rx, quadratic, None, &rust_param);
+        let (cret, _cfx, _cx) = run_c(&[1.0, 2.0], Some(c_quadratic), Some(&mut c_param));
+
+        assert!(matches!(rr, Err(LbfgsError::InvalidMaxLineSearch)));
+        assert_eq!(cret, C_ERR_INVALID_MAXLINESEARCH);
+    }
+
+    #[test]
+    fn compare_error_invalid_orthantwise() {
+        let rust_param = LbfgsParam {
+            orthantwise: Some(OrthantWise { c: -1.0, start: 0, end: -1 }),
+            linesearch: LineSearch::BacktrackingWolfe,
+            ..Default::default()
+        };
+        let mut c_param = default_c_param();
+        c_param.linesearch = C_LINESEARCH_BACKTRACKING_WOLFE;
+        c_param.orthantwise_c = -1.0;
+
+        let mut rx = vec![1.0, 2.0];
+        let rr = lbfgs(&mut rx, quadratic, None, &rust_param);
+        let (cret, _cfx, _cx) = run_c(&[1.0, 2.0], Some(c_quadratic), Some(&mut c_param));
+
+        assert!(matches!(rr, Err(LbfgsError::InvalidOrthantwise)));
+        assert_eq!(cret, C_ERR_INVALID_ORTHANTWISE);
+    }
+
+    #[test]
+    fn compare_error_owlqn_invalid_linesearch() {
+        let rust_param = LbfgsParam {
+            orthantwise: Some(OrthantWise { c: 1.0, start: 0, end: -1 }),
+            linesearch: LineSearch::MoreThuente,
+            ..Default::default()
+        };
+        let mut c_param = default_c_param();
+        c_param.linesearch = C_LINESEARCH_MORETHUENTE;
+        c_param.orthantwise_c = 1.0;
+        c_param.orthantwise_start = 0;
+        c_param.orthantwise_end = -1;
+
+        let mut rx = vec![1.0, 2.0];
+        let rr = lbfgs(&mut rx, quadratic, None, &rust_param);
+        let (cret, _cfx, _cx) = run_c(&[1.0, 2.0], Some(c_quadratic), Some(&mut c_param));
+
+        assert!(matches!(rr, Err(LbfgsError::InvalidLineSearch)));
+        assert_eq!(cret, C_ERR_INVALID_LINESEARCH);
     }
 }

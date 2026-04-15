@@ -10,6 +10,7 @@ fn main() {
     }
 
     let mut cmake_cfg = cmake::Config::new(".");
+    cmake_cfg.define("CMAKE_POLICY_VERSION_MINIMUM", "3.5");
     if cfg!(target_os = "macos") && cfg!(target_arch = "x86_64") {
         cmake_cfg.define("CMAKE_C_FLAGS", "-mmacosx-version-min=10.9");
     }

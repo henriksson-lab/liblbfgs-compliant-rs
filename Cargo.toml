@@ -1,6 +1,6 @@
 [package]
 name = "liblbfgs-compliant-rs"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Messense Lv <messense@icloud.com>", "Johan Henriksson <mahogny@areta.org>"]
 description = "Faithful pure-rust version of libLBFGS"
 edition = "2021"
