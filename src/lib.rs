@@ -1,3 +1,11 @@
+//! Pure Rust port of [libLBFGS](https://github.com/chokkan/liblbfgs).
+//!
+//! Bit-exact reproduction of the original C library: every `f64` produced by
+//! this crate matches the reference C implementation down to the last bit.
+//!
+//! Public API: [`lbfgs`], [`LbfgsParam`], [`LineSearch`], [`OrthantWise`],
+//! [`LbfgsError`], [`Convergence`].
+
 #![allow(non_camel_case_types)]
 
 mod arithmetic;
@@ -12,13 +20,17 @@ pub mod c_ffi;
 /// Line search algorithm selection.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum LineSearch {
-    /// More-Thuente method (default).
+    /// `LBFGS_LINESEARCH_MORETHUENTE`: More-Thuente method satisfying strong
+    /// Wolfe conditions (default).
     MoreThuente,
-    /// Backtracking with Armijo condition only.
+    /// `LBFGS_LINESEARCH_BACKTRACKING_ARMIJO`: backtracking with the
+    /// sufficient decrease (Armijo) condition only.
     BacktrackingArmijo,
-    /// Backtracking with regular Wolfe condition.
+    /// `LBFGS_LINESEARCH_BACKTRACKING_WOLFE`: backtracking with sufficient
+    /// decrease (Armijo) and curvature (Wolfe) conditions.
     BacktrackingWolfe,
-    /// Backtracking with strong Wolfe condition.
+    /// `LBFGS_LINESEARCH_BACKTRACKING_STRONG_WOLFE`: backtracking with
+    /// sufficient decrease and strong curvature conditions.
     BacktrackingStrongWolfe,
 }
 
@@ -29,6 +41,9 @@ impl Default for LineSearch {
 }
 
 /// L1 (OWL-QN) regularization parameters.
+///
+/// Enables OWL-QN (Orthant-Wise Limited-memory Quasi-Newton) L1-regularized
+/// optimization. See Andrew & Gao, ICML 2007.
 #[derive(Debug, Copy, Clone)]
 pub struct OrthantWise {
     /// Coefficient for L1 norm. Positive value activates OWL-QN.
@@ -40,9 +55,14 @@ pub struct OrthantWise {
 }
 
 /// L-BFGS optimization parameters.
+///
+/// These fields correspond 1:1 to the C `lbfgs_parameter_t` struct from
+/// `lbfgs.h`. Use [`LbfgsParam::default()`] to obtain the same defaults
+/// produced by `lbfgs_parameter_init()`.
 #[derive(Debug, Copy, Clone)]
 pub struct LbfgsParam {
     /// Number of corrections to approximate the inverse Hessian (default 6).
+    /// Typical range 3-20; values <3 may be slow, >20 use extra memory.
     pub m: i32,
     /// Epsilon for convergence test (default 1e-5).
     pub epsilon: f64,
@@ -64,7 +84,8 @@ pub struct LbfgsParam {
     pub ftol: f64,
     /// Wolfe condition coefficient (default 0.9).
     pub wolfe: f64,
-    /// Gradient accuracy for line search (default 0.9).
+    /// Gradient accuracy for line search (default 0.9). Smaller values produce
+    /// a more accurate line search.
     pub gtol: f64,
     /// Machine precision estimate (default 1e-16).
     pub xtol: f64,
@@ -94,48 +115,92 @@ impl Default for LbfgsParam {
 }
 
 /// Progress information passed to the progress callback.
+///
+/// Snapshot passed to the user progress callback. Return `false` from the
+/// callback to cancel optimization (yields [`LbfgsError::Canceled`]).
 pub struct ProgressReport<'a> {
+    /// Current variables.
     pub x: &'a [f64],
+    /// Current gradient.
     pub g: &'a [f64],
+    /// Current objective value.
     pub fx: f64,
+    /// Euclidean norm of `x`.
     pub xnorm: f64,
+    /// Euclidean norm of `g` (or pseudo-gradient when OWL-QN is active).
     pub gnorm: f64,
+    /// Line-search step taken this iteration.
     pub step: f64,
+    /// Iteration count (1-based).
     pub k: i32,
+    /// Line-search evaluations this iteration.
     pub ls: i32,
 }
 
 /// Error codes from the L-BFGS optimizer.
+///
+/// Each variant corresponds to a `LBFGSERR_*` constant from the C library;
+/// the `Display` impl produces the same human-readable strings as
+/// `lbfgs_strerror()`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LbfgsError {
+    /// Unknown error.
     UnknownError,
+    /// Logic error.
     LogicError,
+    /// Insufficient memory.
     OutOfMemory,
+    /// The minimization process has been canceled.
     Canceled,
+    /// Invalid number of variables specified.
     InvalidN,
+    /// Invalid epsilon.
     InvalidEpsilon,
+    /// Invalid past.
     InvalidTestPeriod,
+    /// Invalid delta.
     InvalidDelta,
+    /// Invalid linesearch.
     InvalidLineSearch,
+    /// Invalid min_step.
     InvalidMinStep,
+    /// Invalid max_step.
     InvalidMaxStep,
+    /// Invalid ftol.
     InvalidFtol,
+    /// Invalid wolfe.
     InvalidWolfe,
+    /// Invalid gtol.
     InvalidGtol,
+    /// Invalid xtol.
     InvalidXtol,
+    /// Invalid max_linesearch.
     InvalidMaxLineSearch,
+    /// Invalid orthantwise_c.
     InvalidOrthantwise,
+    /// Invalid orthantwise_start.
     InvalidOrthantwiseStart,
+    /// Invalid orthantwise_end.
     InvalidOrthantwiseEnd,
+    /// Line-search step out of interval.
     OutOfInterval,
+    /// Interval of uncertainty became too small.
     IncorrectTMinMax,
+    /// Rounding error in line search.
     RoundingError,
+    /// Line-search step became smaller than min_step.
     MinimumStep,
+    /// Line-search step became larger than max_step.
     MaximumStep,
+    /// Line-search reached maximum evaluations.
     MaximumLineSearch,
+    /// Reached maximum number of iterations.
     MaximumIteration,
+    /// Interval of uncertainty width at most xtol.
     WidthTooSmall,
+    /// Negative line-search step.
     InvalidParameters,
+    /// Search direction increases the objective function.
     IncreaseGradient,
 }
 
@@ -315,11 +380,17 @@ fn param_to_internal(p: &LbfgsParam) -> lbfgs_core::InternalParam {
 
 /// Run L-BFGS optimization.
 ///
+/// Safe wrapper over a direct port of `int lbfgs(...)` from the C library;
+/// produces bit-exact results matching libLBFGS.
+///
 /// - `x`: initial variable values (modified in-place to the optimized solution)
 /// - `evaluate`: closure `|x: &[f64], g: &mut [f64], step: f64| -> f64` — compute objective
 ///   value and write gradient into `g`. Returns the objective function value.
 /// - `progress`: optional closure receiving progress info, return `false` to cancel
 /// - `param`: optimization parameters (use `LbfgsParam::default()` for defaults)
+///
+/// Returns `Ok(LbfgsResult)` on convergence (gradient norm, delta, or already
+/// minimized) or `Err(LbfgsError)` on failure or user cancellation.
 pub fn lbfgs(
     x: &mut [f64],
     evaluate: impl FnMut(&[f64], &mut [f64], f64) -> f64,

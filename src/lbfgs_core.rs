@@ -1,10 +1,16 @@
-/// Main L-BFGS optimization implementation — direct translation of lbfgs() from lbfgs.c.
+//! Main L-BFGS optimization implementation — direct translation of lbfgs() from lbfgs.c.
 
 use crate::arithmetic::*;
 use crate::linesearch::*;
 use crate::owlqn::*;
 use crate::*;
 
+/// One entry of the limited-memory BFGS history, mirroring `tag_iteration_data` in lbfgs.c.
+///
+/// Each iteration stores the step `s = x_{k+1} - x_k`, the gradient difference
+/// `y = g_{k+1} - g_k`, the inner product `ys = dot(y, s)`, and the scalar
+/// `alpha` produced by the first (backward) pass of the two-loop recursion and
+/// consumed by the second (forward) pass.
 struct IterationData {
     alpha: f64,
     s: Vec<f64>,
@@ -12,7 +18,12 @@ struct IterationData {
     ys: f64,
 }
 
-/// Internal parameter struct matching C layout semantics but using plain Rust types.
+/// Internal copy of `lbfgs_parameter_t` used by the optimizer.
+///
+/// Identical in meaning to the user-facing `LbfgsParam` (see `lib.rs`), but the
+/// `linesearch` field is stored as a plain `i32` matching the C
+/// `LBFGS_LINESEARCH_*` constants so it can be compared directly during
+/// parameter validation and line-search dispatch.
 #[derive(Debug, Copy, Clone)]
 pub struct InternalParam {
     pub m: i32,
@@ -56,6 +67,13 @@ impl Default for InternalParam {
     }
 }
 
+/// Line-search routine selected after parameter validation.
+///
+/// Chosen from the `linesearch` field of [`InternalParam`] together with the
+/// OWL-QN activation flag (`orthantwise_c != 0`): when OWL-QN is active only
+/// `LBFGS_LINESEARCH_BACKTRACKING` is accepted (mapped to `BacktrackingOwlqn`);
+/// otherwise `LBFGS_LINESEARCH_MORETHUENTE` maps to `MoreThuente` and the
+/// Armijo / Wolfe / Strong-Wolfe variants all map to `Backtracking`.
 #[derive(Copy, Clone)]
 enum LineSearchMethod {
     MoreThuente,
@@ -63,7 +81,29 @@ enum LineSearchMethod {
     BacktrackingOwlqn,
 }
 
-/// Main L-BFGS optimization — safe Rust API with closures.
+/// L-BFGS optimization driver — direct translation of `int lbfgs(...)` from lbfgs.c.
+///
+/// Performs full parameter validation (returning the appropriate `LBFGSERR_*`
+/// code on invalid input), selects the line-search method
+/// (`MoreThuente` / `Backtracking` / `BacktrackingOwlqn`), allocates the
+/// working vectors and the limited-memory history, and evaluates the initial
+/// objective and gradient. When `orthantwise_c != 0` the OWL-QN pseudo-gradient
+/// is constructed and used in place of the gradient throughout. The main loop
+/// performs, on each iteration, a line search along the current search
+/// direction, an optional user progress callback (which may cancel the run),
+/// the gradient-norm and delta-based convergence tests, and the L-BFGS
+/// two-loop recursion that produces the next search direction.
+///
+/// Returns an `i32` status code: `LBFGS_SUCCESS` on convergence, `LBFGS_STOP`
+/// on the delta-based stopping test, `LBFGS_ALREADY_MINIMIZED` when the
+/// initial point already satisfies the gradient criterion, or a negative
+/// `LBFGSERR_*` value on failure. The final objective value is written
+/// through `out_fx` and the optimized variables into `x`.
+///
+/// The user-supplied `evaluate` closure is always invoked on the original
+/// `n`-element slices; internally the implementation pads its working buffers
+/// to length `n` (the C code rounds up to a multiple of 8 for SSE-aligned
+/// storage, retained here for bit-exact compatibility).
 pub fn lbfgs_impl_safe(
     x: &mut [f64],
     out_fx: &mut f64,

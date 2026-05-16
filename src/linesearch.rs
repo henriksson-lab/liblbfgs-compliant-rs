@@ -1,4 +1,4 @@
-/// Line search implementations — direct translation of the C line search functions.
+//! Line search implementations — direct translation of the C line search functions.
 
 use crate::arithmetic::*;
 use crate::lbfgs_core::InternalParam;
@@ -9,21 +9,25 @@ use crate::*;
 // Interpolation helpers (from C macros CUBIC_MINIMIZER, etc.)
 // ---------------------------------------------------------------------------
 
+/// Return the smaller of two values using `if a <= b { a } else { b }` to match C semantics.
 #[inline]
 fn min2(a: f64, b: f64) -> f64 {
     if a <= b { a } else { b }
 }
 
+/// Return the larger of two values using `if a >= b { a } else { b }` to match C semantics.
 #[inline]
 fn max2(a: f64, b: f64) -> f64 {
     if a >= b { a } else { b }
 }
 
+/// Return the maximum of three values via nested `max2`.
 #[inline]
 fn max3(a: f64, b: f64, c: f64) -> f64 {
     max2(max2(a, b), c)
 }
 
+/// Find the minimizer of the cubic interpolant through `(u, fu, du)` and `(v, fv, dv)`.
 #[inline]
 fn cubic_minimizer(u: f64, fu: f64, du: f64, v: f64, fv: f64, dv: f64) -> f64 {
     let d = v - u;
@@ -43,6 +47,7 @@ fn cubic_minimizer(u: f64, fu: f64, du: f64, v: f64, fv: f64, dv: f64) -> f64 {
     u + r2 * d
 }
 
+/// Cubic minimizer variant that clamps the discriminant to `>= 0` (for the non-bracketed case) and falls back to `xmin`/`xmax` when the interpolant fails.
 #[inline]
 fn cubic_minimizer2(
     u: f64, fu: f64, du: f64,
@@ -72,12 +77,14 @@ fn cubic_minimizer2(
     }
 }
 
+/// Find the minimizer of the quadratic interpolant through `(u, fu, du)` and `(v, fv)`.
 #[inline]
 fn quad_minimizer(u: f64, fu: f64, du: f64, v: f64, fv: f64) -> f64 {
     let a = v - u;
     u + du / ((fu - fv) / a + du) / 2.0 * a
 }
 
+/// Find the minimizer of the quadratic interpolant through `(u, du)` and `(v, dv)` (gradients only — the secant step).
 #[inline]
 fn quad_minimizer2(u: f64, du: f64, v: f64, dv: f64) -> f64 {
     let a = u - v;
@@ -88,6 +95,16 @@ fn quad_minimizer2(u: f64, du: f64, v: f64, dv: f64) -> f64 {
 // update_trial_interval
 // ---------------------------------------------------------------------------
 
+/// Compute a new safeguarded trial value `t` for the line search and update the interval of
+/// uncertainty `[x, y]`. `x` holds the step with the lowest function value seen so far; `t` is
+/// the current trial step. The four cases (higher `ft`; lower `ft` with opposite-sign
+/// derivatives; lower `ft` with same-sign derivatives and decreasing derivative magnitude; lower
+/// `ft` otherwise) select between a cubic interpolant and a quadratic/secant minimizer, after
+/// which the result is clamped to `[tmin, tmax]` and, when the minimum is bracketed, to at most
+/// 66% of the interval width as a safeguard. Returns `0` on success, or one of
+/// `LBFGSERR_OUTOFINTERVAL`, `LBFGSERR_INCREASEGRADIENT`, `LBFGSERR_INCORRECT_TMINMAX`.
+/// Reference: Moré & Thuente, "Line Search Algorithms with Guaranteed Sufficient Decrease,"
+/// ACM TOMS 20(3), 1994.
 pub fn update_trial_interval(
     x: &mut f64, fx: &mut f64, dx: &mut f64,
     y: &mut f64, fy: &mut f64, dy: &mut f64,
@@ -204,6 +221,14 @@ pub fn update_trial_interval(
 // line_search_backtracking
 // ---------------------------------------------------------------------------
 
+/// Backtracking line search satisfying the Armijo, regular Wolfe, or strong Wolfe condition
+/// depending on `param.linesearch`. Starting from the initial step `*stp`, the search trial
+/// value is multiplied by `0.5` when the sufficient-decrease test fails and by `2.1` when the
+/// curvature condition is too loose, until the requested condition is met or the step leaves
+/// `[min_step, max_step]`. On success returns the number of function evaluations performed;
+/// otherwise returns a negative error code (`LBFGSERR_INVALIDPARAMETERS`,
+/// `LBFGSERR_INCREASEGRADIENT`, `LBFGSERR_MINIMUMSTEP`, `LBFGSERR_MAXIMUMSTEP`, or
+/// `LBFGSERR_MAXIMUMLINESEARCH`).
 pub fn line_search_backtracking(
     _n: usize,
     x: &mut [f64],
@@ -284,6 +309,14 @@ pub fn line_search_backtracking(
 // line_search_backtracking_owlqn
 // ---------------------------------------------------------------------------
 
+/// Backtracking line search specialized for OWL-QN (L1-regularized) optimization. The orthant
+/// for the new point is chosen from the previous variables (or `-gp` where `xp == 0`), each
+/// trial point is projected back onto that orthant via `owlqn_project`, and the L1-regularized
+/// objective `f + c * ||x||_1` is tested against the OWL-QN sufficient-decrease condition based
+/// on the inner product of the actual displacement with the pseudo-gradient. The trial step is
+/// halved on failure. Returns the number of evaluations on success or a negative error code
+/// (`LBFGSERR_INVALIDPARAMETERS`, `LBFGSERR_MINIMUMSTEP`, `LBFGSERR_MAXIMUMSTEP`,
+/// `LBFGSERR_MAXIMUMLINESEARCH`).
 pub fn line_search_backtracking_owlqn(
     n: usize,
     x: &mut [f64],
@@ -349,6 +382,18 @@ pub fn line_search_backtracking_owlqn(
 // line_search_morethuente
 // ---------------------------------------------------------------------------
 
+/// Moré-Thuente line search satisfying the strong Wolfe condition by iteratively refining an
+/// interval of uncertainty. The endpoints `stx` (best step so far) and `sty` (other endpoint)
+/// track the bracket; on each iteration a new trial step is produced by `update_trial_interval`
+/// using cubic and quadratic interpolants, optionally on the auxiliary "modified" function
+/// `f - stp * dgtest` during stage 1. The search terminates when the sufficient-decrease and
+/// curvature tests both hold, when the interval width falls below `xtol * stmax`, or when a
+/// boundary is reached. Returns the number of function evaluations on success or a negative
+/// error code (`LBFGSERR_INVALIDPARAMETERS`, `LBFGSERR_INCREASEGRADIENT`,
+/// `LBFGSERR_ROUNDING_ERROR`, `LBFGSERR_MINIMUMSTEP`, `LBFGSERR_MAXIMUMSTEP`,
+/// `LBFGSERR_WIDTHTOOSMALL`, or `LBFGSERR_MAXIMUMLINESEARCH`).
+/// Reference: Moré & Thuente, "Line Search Algorithms with Guaranteed Sufficient Decrease,"
+/// ACM TOMS 20(3):286–307, 1994.
 pub fn line_search_morethuente(
     _n: usize,
     x: &mut [f64],

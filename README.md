@@ -4,6 +4,8 @@ Faithful pure-Rust implementation of the [libLBFGS](https://github.com/chokkan/l
 
 The API is based on the code from https://github.com/messense/liblbfgs-sys, so this crate should be a drop-in replacement
 
+* 2026-05-16: Appears to be a faithful translation
+
 ## This is an LLM-mediated faithful (hopefully) translation, not the original code! 
 
 Most users should probably first see if the existing original code works for them, unless they have reason otherwise. The original source

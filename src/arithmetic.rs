@@ -1,10 +1,11 @@
-/// Vector operations.
-/// Default: AVX2+FMA SIMD on x86_64.
-/// Without feature "simd": scalar-only, bit-exact with C libLBFGS.
+//! Vector operations.
+//! Default: AVX2+FMA SIMD on x86_64.
+//! Without feature "simd": scalar-only, bit-exact with C libLBFGS.
 
 #[cfg(all(target_arch = "x86_64", feature = "simd"))]
 use std::arch::x86_64::*;
 
+/// Set every element of `x` to the scalar `c`.
 #[inline(always)]
 #[allow(dead_code)]
 pub fn vecset(x: &mut [f64], c: f64) {
@@ -13,11 +14,13 @@ pub fn vecset(x: &mut [f64], c: f64) {
     }
 }
 
+/// Copy `x` into `y` (y := x).
 #[inline(always)]
 pub fn veccpy(y: &mut [f64], x: &[f64]) {
     y[..x.len()].copy_from_slice(x);
 }
 
+/// Copy the negation of `x` into `y` (y := -x).
 #[inline(always)]
 pub fn vecncpy(y: &mut [f64], x: &[f64]) {
     let n = x.len();
@@ -26,6 +29,7 @@ pub fn vecncpy(y: &mut [f64], x: &[f64]) {
     }
 }
 
+/// Compute y := y + c * x (AXPY).
 #[inline(always)]
 pub fn vecadd(y: &mut [f64], x: &[f64], c: f64) {
     let n = x.len();
@@ -41,6 +45,7 @@ pub fn vecadd(y: &mut [f64], x: &[f64], c: f64) {
     }
 }
 
+/// AVX2+FMA accelerated implementation of [`vecadd`].
 #[cfg(all(target_arch = "x86_64", feature = "simd"))]
 #[target_feature(enable = "avx2,fma")]
 unsafe fn vecadd_simd(y: &mut [f64], x: &[f64], c: f64, n: usize) {
@@ -61,6 +66,7 @@ unsafe fn vecadd_simd(y: &mut [f64], x: &[f64], c: f64, n: usize) {
     }
 }
 
+/// Compute the element-wise difference z := x - y.
 #[inline(always)]
 pub fn vecdiff(z: &mut [f64], x: &[f64], y: &[f64]) {
     let n = z.len();
@@ -76,6 +82,7 @@ pub fn vecdiff(z: &mut [f64], x: &[f64], y: &[f64]) {
     }
 }
 
+/// AVX2 accelerated implementation of [`vecdiff`].
 #[cfg(all(target_arch = "x86_64", feature = "simd"))]
 #[target_feature(enable = "avx2")]
 unsafe fn vecdiff_simd(z: &mut [f64], x: &[f64], y: &[f64], n: usize) {
@@ -95,6 +102,7 @@ unsafe fn vecdiff_simd(z: &mut [f64], x: &[f64], y: &[f64], n: usize) {
     }
 }
 
+/// Scale `y` in place by the scalar `c` (y := c * y).
 #[inline(always)]
 pub fn vecscale(y: &mut [f64], c: f64) {
     let n = y.len();
@@ -103,6 +111,7 @@ pub fn vecscale(y: &mut [f64], c: f64) {
     }
 }
 
+/// Return the inner product x . y = sum_i x[i] * y[i].
 #[inline(always)]
 pub fn vecdot(x: &[f64], y: &[f64]) -> f64 {
     let n = x.len();
@@ -119,6 +128,7 @@ pub fn vecdot(x: &[f64], y: &[f64]) -> f64 {
     s
 }
 
+/// AVX2+FMA accelerated implementation of [`vecdot`].
 #[cfg(all(target_arch = "x86_64", feature = "simd"))]
 #[target_feature(enable = "avx2,fma")]
 unsafe fn vecdot_simd(x: &[f64], y: &[f64], n: usize) -> f64 {
@@ -157,16 +167,20 @@ unsafe fn vecdot_simd(x: &[f64], y: &[f64], n: usize) -> f64 {
     s
 }
 
+/// Return the Euclidean (L2) norm sqrt(x . x).
 #[inline(always)]
 pub fn vec2norm(x: &[f64]) -> f64 {
     vecdot(x, x).sqrt()
 }
 
+/// Return the reciprocal of the Euclidean norm, 1 / sqrt(x . x).
 #[inline(always)]
 pub fn vec2norminv(x: &[f64]) -> f64 {
     1.0 / vec2norm(x)
 }
 
+/// Return `true` iff `x` and `y` have different IEEE 754 sign bits; matches the SSE
+/// sign-bit comparison used by the C libLBFGS (treats -0.0 and +0.0 as different).
 #[inline(always)]
 pub fn fsigndiff(x: f64, y: f64) -> bool {
     x.is_sign_negative() != y.is_sign_negative()
