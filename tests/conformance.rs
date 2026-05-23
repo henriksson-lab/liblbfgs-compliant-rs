@@ -24,8 +24,14 @@ macro_rules! assert_f64 {
         } else {
             expected.abs() * 1e-6 + 1e-15
         };
-        assert!(($val - expected).abs() < tol,
-            "{}: got {}, expected {}, diff {}", $msg, $val, expected, ($val - expected).abs());
+        assert!(
+            ($val - expected).abs() < tol,
+            "{}: got {}, expected {}, diff {}",
+            $msg,
+            $val,
+            expected,
+            ($val - expected).abs()
+        );
     };
 }
 
@@ -140,7 +146,9 @@ fn test_rosenbrock_2d_strong_wolfe() {
 
 #[test]
 fn test_rosenbrock_10d_default() {
-    let mut x: Vec<f64> = (0..10).map(|i| if i % 2 == 0 { -1.2 } else { 1.0 }).collect();
+    let mut x: Vec<f64> = (0..10)
+        .map(|i| if i % 2 == 0 { -1.2 } else { 1.0 })
+        .collect();
     let mut counter = 0i32;
     let r = lbfgs(
         &mut x,
@@ -156,7 +164,11 @@ fn test_rosenbrock_10d_default() {
     assert_eq!(counter, 35, "iteration count mismatch");
     assert_f64!(r.fx, 4418965835762227741, "fx mismatch");
     for i in 0..10 {
-        let expected = if i % 2 == 0 { 4607182416870061669 } else { 4607182414854651967 };
+        let expected = if i % 2 == 0 {
+            4607182416870061669
+        } else {
+            4607182414854651967
+        };
         assert_f64!(x[i], expected, &format!("x[{}] mismatch", i));
     }
 }
@@ -183,7 +195,11 @@ fn test_quadratic_4d() {
 fn test_owlqn_basic() {
     let mut x = vec![1.0, 2.0, 3.0, 4.0];
     let param = LbfgsParam {
-        orthantwise: Some(OrthantWise { c: 1.0, start: 0, end: -1 }),
+        orthantwise: Some(OrthantWise {
+            c: 1.0,
+            start: 0,
+            end: -1,
+        }),
         linesearch: LineSearch::BacktrackingWolfe,
         ..Default::default()
     };
@@ -198,7 +214,11 @@ fn test_owlqn_basic() {
 fn test_owlqn_partial_regularization() {
     let mut x = vec![5.0, 5.0, 5.0, 5.0];
     let param = LbfgsParam {
-        orthantwise: Some(OrthantWise { c: 10.0, start: 1, end: -1 }),
+        orthantwise: Some(OrthantWise {
+            c: 10.0,
+            start: 1,
+            end: -1,
+        }),
         linesearch: LineSearch::BacktrackingWolfe,
         ..Default::default()
     };
@@ -213,7 +233,11 @@ fn test_owlqn_partial_regularization() {
 fn test_owlqn_invalid_linesearch() {
     let mut x = vec![1.0, 2.0];
     let param = LbfgsParam {
-        orthantwise: Some(OrthantWise { c: 1.0, start: 0, end: -1 }),
+        orthantwise: Some(OrthantWise {
+            c: 1.0,
+            start: 0,
+            end: -1,
+        }),
         linesearch: LineSearch::MoreThuente, // invalid for OWL-QN
         ..Default::default()
     };
@@ -235,43 +259,79 @@ fn test_invalid_n() {
 #[test]
 fn test_invalid_epsilon() {
     let mut x = vec![1.0];
-    let param = LbfgsParam { epsilon: -1.0, ..Default::default() };
-    assert!(matches!(lbfgs(&mut x, quadratic, None, &param), Err(LbfgsError::InvalidEpsilon)));
+    let param = LbfgsParam {
+        epsilon: -1.0,
+        ..Default::default()
+    };
+    assert!(matches!(
+        lbfgs(&mut x, quadratic, None, &param),
+        Err(LbfgsError::InvalidEpsilon)
+    ));
 }
 
 #[test]
 fn test_invalid_past() {
     let mut x = vec![1.0];
-    let param = LbfgsParam { past: -1, ..Default::default() };
-    assert!(matches!(lbfgs(&mut x, quadratic, None, &param), Err(LbfgsError::InvalidTestPeriod)));
+    let param = LbfgsParam {
+        past: -1,
+        ..Default::default()
+    };
+    assert!(matches!(
+        lbfgs(&mut x, quadratic, None, &param),
+        Err(LbfgsError::InvalidTestPeriod)
+    ));
 }
 
 #[test]
 fn test_invalid_delta() {
     let mut x = vec![1.0];
-    let param = LbfgsParam { delta: -1.0, ..Default::default() };
-    assert!(matches!(lbfgs(&mut x, quadratic, None, &param), Err(LbfgsError::InvalidDelta)));
+    let param = LbfgsParam {
+        delta: -1.0,
+        ..Default::default()
+    };
+    assert!(matches!(
+        lbfgs(&mut x, quadratic, None, &param),
+        Err(LbfgsError::InvalidDelta)
+    ));
 }
 
 #[test]
 fn test_invalid_minstep() {
     let mut x = vec![1.0];
-    let param = LbfgsParam { min_step: -1.0, ..Default::default() };
-    assert!(matches!(lbfgs(&mut x, quadratic, None, &param), Err(LbfgsError::InvalidMinStep)));
+    let param = LbfgsParam {
+        min_step: -1.0,
+        ..Default::default()
+    };
+    assert!(matches!(
+        lbfgs(&mut x, quadratic, None, &param),
+        Err(LbfgsError::InvalidMinStep)
+    ));
 }
 
 #[test]
 fn test_invalid_maxstep() {
     let mut x = vec![1.0];
-    let param = LbfgsParam { max_step: 0.0, ..Default::default() };
-    assert!(matches!(lbfgs(&mut x, quadratic, None, &param), Err(LbfgsError::InvalidMaxStep)));
+    let param = LbfgsParam {
+        max_step: 0.0,
+        ..Default::default()
+    };
+    assert!(matches!(
+        lbfgs(&mut x, quadratic, None, &param),
+        Err(LbfgsError::InvalidMaxStep)
+    ));
 }
 
 #[test]
 fn test_invalid_ftol() {
     let mut x = vec![1.0];
-    let param = LbfgsParam { ftol: -1.0, ..Default::default() };
-    assert!(matches!(lbfgs(&mut x, quadratic, None, &param), Err(LbfgsError::InvalidFtol)));
+    let param = LbfgsParam {
+        ftol: -1.0,
+        ..Default::default()
+    };
+    assert!(matches!(
+        lbfgs(&mut x, quadratic, None, &param),
+        Err(LbfgsError::InvalidFtol)
+    ));
 }
 
 #[test]
@@ -282,39 +342,67 @@ fn test_invalid_wolfe() {
         wolfe: 0.0,
         ..Default::default()
     };
-    assert!(matches!(lbfgs(&mut x, quadratic, None, &param), Err(LbfgsError::InvalidWolfe)));
+    assert!(matches!(
+        lbfgs(&mut x, quadratic, None, &param),
+        Err(LbfgsError::InvalidWolfe)
+    ));
 }
 
 #[test]
 fn test_invalid_gtol() {
     let mut x = vec![1.0];
-    let param = LbfgsParam { gtol: -1.0, ..Default::default() };
-    assert!(matches!(lbfgs(&mut x, quadratic, None, &param), Err(LbfgsError::InvalidGtol)));
+    let param = LbfgsParam {
+        gtol: -1.0,
+        ..Default::default()
+    };
+    assert!(matches!(
+        lbfgs(&mut x, quadratic, None, &param),
+        Err(LbfgsError::InvalidGtol)
+    ));
 }
 
 #[test]
 fn test_invalid_xtol() {
     let mut x = vec![1.0];
-    let param = LbfgsParam { xtol: -1.0, ..Default::default() };
-    assert!(matches!(lbfgs(&mut x, quadratic, None, &param), Err(LbfgsError::InvalidXtol)));
+    let param = LbfgsParam {
+        xtol: -1.0,
+        ..Default::default()
+    };
+    assert!(matches!(
+        lbfgs(&mut x, quadratic, None, &param),
+        Err(LbfgsError::InvalidXtol)
+    ));
 }
 
 #[test]
 fn test_invalid_maxlinesearch() {
     let mut x = vec![1.0];
-    let param = LbfgsParam { max_linesearch: 0, ..Default::default() };
-    assert!(matches!(lbfgs(&mut x, quadratic, None, &param), Err(LbfgsError::InvalidMaxLineSearch)));
+    let param = LbfgsParam {
+        max_linesearch: 0,
+        ..Default::default()
+    };
+    assert!(matches!(
+        lbfgs(&mut x, quadratic, None, &param),
+        Err(LbfgsError::InvalidMaxLineSearch)
+    ));
 }
 
 #[test]
 fn test_invalid_orthantwise() {
     let mut x = vec![1.0];
     let param = LbfgsParam {
-        orthantwise: Some(OrthantWise { c: -1.0, start: 0, end: -1 }),
+        orthantwise: Some(OrthantWise {
+            c: -1.0,
+            start: 0,
+            end: -1,
+        }),
         linesearch: LineSearch::BacktrackingWolfe,
         ..Default::default()
     };
-    assert!(matches!(lbfgs(&mut x, quadratic, None, &param), Err(LbfgsError::InvalidOrthantwise)));
+    assert!(matches!(
+        lbfgs(&mut x, quadratic, None, &param),
+        Err(LbfgsError::InvalidOrthantwise)
+    ));
 }
 
 #[test]
@@ -323,11 +411,18 @@ fn test_invalid_linesearch_code() {
     // Test that OWL-QN + MoreThuente is rejected instead.
     let mut x = vec![1.0];
     let param = LbfgsParam {
-        orthantwise: Some(OrthantWise { c: 1.0, start: 0, end: -1 }),
+        orthantwise: Some(OrthantWise {
+            c: 1.0,
+            start: 0,
+            end: -1,
+        }),
         linesearch: LineSearch::MoreThuente,
         ..Default::default()
     };
-    assert!(matches!(lbfgs(&mut x, quadratic, None, &param), Err(LbfgsError::InvalidLineSearch)));
+    assert!(matches!(
+        lbfgs(&mut x, quadratic, None, &param),
+        Err(LbfgsError::InvalidLineSearch)
+    ));
 }
 
 // ===========================================================================
@@ -369,7 +464,10 @@ fn test_max_iterations() {
     let r = lbfgs(
         &mut x,
         rosenbrock_2d,
-        Some(&mut |_| { counter += 1; true }),
+        Some(&mut |_| {
+            counter += 1;
+            true
+        }),
         &param,
     );
     assert!(matches!(r, Err(LbfgsError::MaximumIteration)));
@@ -412,7 +510,10 @@ fn test_null_progress_callback() {
 #[test]
 fn test_rosenbrock_2d_m3() {
     let mut x = vec![-1.2, 1.0];
-    let param = LbfgsParam { m: 3, ..Default::default() };
+    let param = LbfgsParam {
+        m: 3,
+        ..Default::default()
+    };
     let r = lbfgs(&mut x, rosenbrock_2d, None, &param).unwrap();
     assert_f64!(r.fx, 4351180256846768640, "fx mismatch");
     assert_f64!(x[0], 4607182418805360988, "x[0] mismatch");
@@ -422,7 +523,10 @@ fn test_rosenbrock_2d_m3() {
 #[test]
 fn test_rosenbrock_2d_m20() {
     let mut x = vec![-1.2, 1.0];
-    let param = LbfgsParam { m: 20, ..Default::default() };
+    let param = LbfgsParam {
+        m: 20,
+        ..Default::default()
+    };
     let r = lbfgs(&mut x, rosenbrock_2d, None, &param).unwrap();
     assert_f64!(r.fx, 4405871263686893167, "fx mismatch");
     assert_f64!(x[0], 4607182417148004599, "x[0] mismatch");
@@ -451,14 +555,22 @@ mod compare_c {
     const C_ERR_INVALID_LINESEARCH: c_int = -1014;
 
     unsafe extern "C" fn c_rosenbrock_2d(
-        _inst: *mut c_void, x: *const f64, g: *mut f64, _n: c_int, _step: f64,
+        _inst: *mut c_void,
+        x: *const f64,
+        g: *mut f64,
+        _n: c_int,
+        _step: f64,
     ) -> f64 {
         let gs = std::slice::from_raw_parts_mut(g, 2);
         rosenbrock_2d(std::slice::from_raw_parts(x, 2), gs, 0.0)
     }
 
     unsafe extern "C" fn c_rosenbrock_nd(
-        _inst: *mut c_void, x: *const f64, g: *mut f64, n: c_int, _step: f64,
+        _inst: *mut c_void,
+        x: *const f64,
+        g: *mut f64,
+        n: c_int,
+        _step: f64,
     ) -> f64 {
         let n = n as usize;
         let gs = std::slice::from_raw_parts_mut(g, n);
@@ -466,7 +578,11 @@ mod compare_c {
     }
 
     unsafe extern "C" fn c_quadratic(
-        _inst: *mut c_void, x: *const f64, g: *mut f64, n: c_int, _step: f64,
+        _inst: *mut c_void,
+        x: *const f64,
+        g: *mut f64,
+        n: c_int,
+        _step: f64,
     ) -> f64 {
         let n = n as usize;
         let gs = std::slice::from_raw_parts_mut(g, n);
@@ -487,7 +603,11 @@ mod compare_c {
     ) -> c_int {
         let count = &mut *(inst as *mut c_int);
         *count += 1;
-        if *count >= 3 { 1 } else { 0 }
+        if *count >= 3 {
+            1
+        } else {
+            0
+        }
     }
 
     fn default_c_param() -> c_ffi::lbfgs_parameter_t {
@@ -516,7 +636,9 @@ mod compare_c {
         unsafe {
             let n = initial.len() as c_int;
             let x = c_ffi::lbfgs_malloc(n);
-            for i in 0..initial.len() { *x.add(i) = initial[i]; }
+            for i in 0..initial.len() {
+                *x.add(i) = initial[i];
+            }
             let mut fx = 0.0f64;
             let p = match param {
                 Some(p) => p as *mut _,
@@ -524,7 +646,9 @@ mod compare_c {
             };
             let ret = c_ffi::lbfgs(n, x, &mut fx, eval, progress, instance, p);
             let mut result = vec![0.0; initial.len()];
-            for i in 0..initial.len() { result[i] = *x.add(i); }
+            for i in 0..initial.len() {
+                result[i] = *x.add(i);
+            }
             c_ffi::lbfgs_free(x);
             (ret, fx, result)
         }
@@ -532,7 +656,13 @@ mod compare_c {
 
     fn assert_same_solution(rr: &LbfgsResult, rx: &[f64], cret: i32, cfx: f64, cx: &[f64]) {
         assert_eq!(cret, C_SUCCESS);
-        assert_eq!(rr.fx.to_bits(), cfx.to_bits(), "fx mismatch: rust={} c={}", rr.fx, cfx);
+        assert_eq!(
+            rr.fx.to_bits(),
+            cfx.to_bits(),
+            "fx mismatch: rust={} c={}",
+            rr.fx,
+            cfx
+        );
         for i in 0..rx.len() {
             assert_eq!(rx[i].to_bits(), cx[i].to_bits(), "x[{}] mismatch", i);
         }
@@ -562,7 +692,9 @@ mod compare_c {
 
     #[test]
     fn compare_rosenbrock_10d() {
-        let init: Vec<f64> = (0..10).map(|i| if i % 2 == 0 { -1.2 } else { 1.0 }).collect();
+        let init: Vec<f64> = (0..10)
+            .map(|i| if i % 2 == 0 { -1.2 } else { 1.0 })
+            .collect();
 
         let mut rx = init.clone();
         let rr = lbfgs(&mut rx, rosenbrock_nd, None, &LbfgsParam::default()).unwrap();
@@ -609,7 +741,11 @@ mod compare_c {
     #[test]
     fn compare_owlqn_quadratic() {
         let rust_param = LbfgsParam {
-            orthantwise: Some(OrthantWise { c: 1.0, start: 0, end: -1 }),
+            orthantwise: Some(OrthantWise {
+                c: 1.0,
+                start: 0,
+                end: -1,
+            }),
             linesearch: LineSearch::BacktrackingWolfe,
             ..Default::default()
         };
@@ -662,7 +798,10 @@ mod compare_c {
 
     #[test]
     fn compare_error_invalid_epsilon() {
-        let rust_param = LbfgsParam { epsilon: -1.0, ..Default::default() };
+        let rust_param = LbfgsParam {
+            epsilon: -1.0,
+            ..Default::default()
+        };
         let mut c_param = default_c_param();
         c_param.epsilon = -1.0;
 
@@ -676,7 +815,10 @@ mod compare_c {
 
     #[test]
     fn compare_error_invalid_max_linesearch() {
-        let rust_param = LbfgsParam { max_linesearch: 0, ..Default::default() };
+        let rust_param = LbfgsParam {
+            max_linesearch: 0,
+            ..Default::default()
+        };
         let mut c_param = default_c_param();
         c_param.max_linesearch = 0;
 
@@ -691,7 +833,11 @@ mod compare_c {
     #[test]
     fn compare_error_invalid_orthantwise() {
         let rust_param = LbfgsParam {
-            orthantwise: Some(OrthantWise { c: -1.0, start: 0, end: -1 }),
+            orthantwise: Some(OrthantWise {
+                c: -1.0,
+                start: 0,
+                end: -1,
+            }),
             linesearch: LineSearch::BacktrackingWolfe,
             ..Default::default()
         };
@@ -710,7 +856,11 @@ mod compare_c {
     #[test]
     fn compare_error_owlqn_invalid_linesearch() {
         let rust_param = LbfgsParam {
-            orthantwise: Some(OrthantWise { c: 1.0, start: 0, end: -1 }),
+            orthantwise: Some(OrthantWise {
+                c: 1.0,
+                start: 0,
+                end: -1,
+            }),
             linesearch: LineSearch::MoreThuente,
             ..Default::default()
         };

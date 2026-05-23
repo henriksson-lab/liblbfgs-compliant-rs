@@ -4,9 +4,7 @@ fn main() {
 
     let src_dir = PathBuf::from("src/liblbfgs");
     if !src_dir.join("lib").exists() {
-        panic!(
-            "liblbfgs submodule not initialized. Run: git submodule update --init --recursive"
-        );
+        panic!("liblbfgs submodule not initialized. Run: git submodule update --init --recursive");
     }
 
     let mut cmake_cfg = cmake::Config::new(".");
@@ -21,10 +19,7 @@ fn main() {
         dst.join("lib").display()
     );
     println!("cargo:rustc-link-lib=static=lbfgs");
-    println!(
-        "cargo:include={}",
-        dst.join("include").display()
-    );
+    println!("cargo:include={}", dst.join("include").display());
 }
 
 #[cfg(not(feature = "compare-c"))]

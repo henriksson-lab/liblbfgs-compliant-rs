@@ -1,6 +1,6 @@
 //! Vector operations.
-//! Default: AVX2+FMA SIMD on x86_64.
-//! Without feature "simd": scalar-only, bit-exact with C libLBFGS.
+//! Default: scalar-only, bit-exact with C libLBFGS.
+//! With feature "simd": AVX2+FMA SIMD on x86_64, with different rounding.
 
 #[cfg(all(target_arch = "x86_64", feature = "simd"))]
 use std::arch::x86_64::*;
@@ -25,7 +25,9 @@ pub fn veccpy(y: &mut [f64], x: &[f64]) {
 pub fn vecncpy(y: &mut [f64], x: &[f64]) {
     let n = x.len();
     for i in 0..n {
-        unsafe { *y.get_unchecked_mut(i) = -*x.get_unchecked(i); }
+        unsafe {
+            *y.get_unchecked_mut(i) = -*x.get_unchecked(i);
+        }
     }
 }
 
@@ -36,12 +38,16 @@ pub fn vecadd(y: &mut [f64], x: &[f64], c: f64) {
     #[cfg(all(target_arch = "x86_64", feature = "simd"))]
     {
         if n >= 4 {
-            unsafe { vecadd_simd(y, x, c, n); }
+            unsafe {
+                vecadd_simd(y, x, c, n);
+            }
             return;
         }
     }
     for i in 0..n {
-        unsafe { *y.get_unchecked_mut(i) += c * *x.get_unchecked(i); }
+        unsafe {
+            *y.get_unchecked_mut(i) += c * *x.get_unchecked(i);
+        }
     }
 }
 
@@ -73,12 +79,16 @@ pub fn vecdiff(z: &mut [f64], x: &[f64], y: &[f64]) {
     #[cfg(all(target_arch = "x86_64", feature = "simd"))]
     {
         if n >= 4 {
-            unsafe { vecdiff_simd(z, x, y, n); }
+            unsafe {
+                vecdiff_simd(z, x, y, n);
+            }
             return;
         }
     }
     for i in 0..n {
-        unsafe { *z.get_unchecked_mut(i) = *x.get_unchecked(i) - *y.get_unchecked(i); }
+        unsafe {
+            *z.get_unchecked_mut(i) = *x.get_unchecked(i) - *y.get_unchecked(i);
+        }
     }
 }
 
@@ -107,7 +117,9 @@ unsafe fn vecdiff_simd(z: &mut [f64], x: &[f64], y: &[f64], n: usize) {
 pub fn vecscale(y: &mut [f64], c: f64) {
     let n = y.len();
     for i in 0..n {
-        unsafe { *y.get_unchecked_mut(i) *= c; }
+        unsafe {
+            *y.get_unchecked_mut(i) *= c;
+        }
     }
 }
 
@@ -123,7 +135,9 @@ pub fn vecdot(x: &[f64], y: &[f64]) -> f64 {
     }
     let mut s = 0.0f64;
     for i in 0..n {
-        unsafe { s += *x.get_unchecked(i) * *y.get_unchecked(i); }
+        unsafe {
+            s += *x.get_unchecked(i) * *y.get_unchecked(i);
+        }
     }
     s
 }

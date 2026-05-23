@@ -310,9 +310,18 @@ pub(crate) const LBFGS_LINESEARCH_BACKTRACKING_STRONG_WOLFE: u32 = 3;
 /// Convert internal integer return code to Result.
 fn code_to_result(code: i32, fx: f64) -> Result<LbfgsResult, LbfgsError> {
     match code {
-        LBFGS_SUCCESS => Ok(LbfgsResult { convergence: Convergence::Gradient, fx }),
-        LBFGS_STOP => Ok(LbfgsResult { convergence: Convergence::Delta, fx }),
-        LBFGS_ALREADY_MINIMIZED => Ok(LbfgsResult { convergence: Convergence::AlreadyMinimized, fx }),
+        LBFGS_SUCCESS => Ok(LbfgsResult {
+            convergence: Convergence::Gradient,
+            fx,
+        }),
+        LBFGS_STOP => Ok(LbfgsResult {
+            convergence: Convergence::Delta,
+            fx,
+        }),
+        LBFGS_ALREADY_MINIMIZED => Ok(LbfgsResult {
+            convergence: Convergence::AlreadyMinimized,
+            fx,
+        }),
         LBFGSERR_UNKNOWNERROR => Err(LbfgsError::UnknownError),
         LBFGSERR_LOGICERROR => Err(LbfgsError::LogicError),
         LBFGSERR_OUTOFMEMORY => Err(LbfgsError::OutOfMemory),
@@ -399,12 +408,6 @@ pub fn lbfgs(
 ) -> Result<LbfgsResult, LbfgsError> {
     let internal_param = param_to_internal(param);
     let mut fx = 0.0f64;
-    let code = lbfgs_core::lbfgs_impl_safe(
-        x,
-        &mut fx,
-        evaluate,
-        progress,
-        &internal_param,
-    );
+    let code = lbfgs_core::lbfgs_impl_safe(x, &mut fx, evaluate, progress, &internal_param);
     code_to_result(code, fx)
 }

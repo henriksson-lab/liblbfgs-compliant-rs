@@ -4,6 +4,7 @@ Faithful pure-Rust implementation of the [libLBFGS](https://github.com/chokkan/l
 
 The API is based on the code from https://github.com/messense/liblbfgs-sys, so this crate should be a drop-in replacement
 
+* 2026-05-23: Renewed audit, no serious issues found but SIMD disabled by default as better for reproducibility. Benchmark made more faithful
 * 2026-05-16: Appears to be a faithful translation
 
 ## This is an LLM-mediated faithful (hopefully) translation, not the original code! 
@@ -32,7 +33,7 @@ This blurb might be out of date. Go to [this page](https://github.com/henriksson
 ## Precision
 
 Note that there is a feature "simd". Enabling it makes this crate produce different results from the original liblbfgs - possibly even more precise results.
-However, this depends on compiler settings, and compiler, used for liblbfgs. So SIMD is enabled by default
+However, this depends on compiler settings, and compiler, used for liblbfgs. SIMD is therefore opt-in and disabled by default.
 
 With SIMD enabled, this crate may be faster than the original C code for larger problems, but exact
 performance depends on CPU, compiler, and whether the C build uses SIMD. See the benchmark section
@@ -156,29 +157,23 @@ Returns `Ok(LbfgsResult)` with convergence type and final `fx`, or `Err(LbfgsErr
 
 ## Performance
 
-Measured with the bundled benchmark against the vendored original C library. Lower is better;
-ratio `< 1.0` means Rust was faster.
+Measured against the vendored original C library on a dense logistic-regression workload.
+Both implementations were built as scalar optimized release binaries (`cc -O3` for C,
+`cargo build --release` for Rust), with the same deterministic data, initial weights,
+L-BFGS parameters, and 25-iteration cap. Lower is better.
 
-Default Rust build (`simd` enabled) vs original C scalar:
+Workload: `200,000 x 512` dense `f64` feature matrix, 26 objective evaluations, about
+819 MB of feature data.
 
-| N | Rust | C | Ratio |
-|---:|---:|---:|---:|
-| 10 | 34.6 us | 26.1 us | 1.32x |
-| 100 | 152.6 us | 197.7 us | 0.77x |
-| 1,000 | 1,522.9 us | 2,160.8 us | 0.70x |
-| 10,000 | 16,371.9 us | 22,484.5 us | 0.73x |
+| Implementation | Iterations | Evaluations | Final fx | Checksum | Median wall time | Max RSS |
+|---|---:|---:|---:|---:|---:|---:|
+| Original C scalar | 25 | 26 | 3.088070060998e+02 | -1.599243887140e+03 | 5.65 s | 803,520 KB |
+| Rust scalar default | 25 | 26 | 3.088070060998e+02 | -1.599243887140e+03 | 5.63 s | 803,840 KB |
 
-Scalar Rust (`--no-default-features`) vs original C scalar:
-
-| N | Rust | C | Ratio |
-|---:|---:|---:|---:|
-| 10 | 18.3 us | 19.2 us | 0.95x |
-| 100 | 149.5 us | 131.7 us | 1.14x |
-| 1,000 | 1,625.7 us | 1,512.7 us | 1.07x |
-| 10,000 | 17,595.3 us | 14,053.4 us | 1.25x |
-
-The scalar run was bit-exact with the C library for all benchmarked sizes. The SIMD run produced
-small numerical differences, as expected from AVX/FMA rounding differences.
+On this run, the scalar Rust implementation followed the same numerical path as C and
+had effectively identical speed and memory use. SIMD is intentionally not included in
+this comparison because AVX/FMA changes floating-point rounding and can affect
+reproducibility.
 
 ## Verifying against the C library
 

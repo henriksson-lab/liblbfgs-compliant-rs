@@ -12,13 +12,21 @@ use crate::*;
 /// Return the smaller of two values using `if a <= b { a } else { b }` to match C semantics.
 #[inline]
 fn min2(a: f64, b: f64) -> f64 {
-    if a <= b { a } else { b }
+    if a <= b {
+        a
+    } else {
+        b
+    }
 }
 
 /// Return the larger of two values using `if a >= b { a } else { b }` to match C semantics.
 #[inline]
 fn max2(a: f64, b: f64) -> f64 {
-    if a >= b { a } else { b }
+    if a >= b {
+        a
+    } else {
+        b
+    }
 }
 
 /// Return the maximum of three values via nested `max2`.
@@ -50,9 +58,14 @@ fn cubic_minimizer(u: f64, fu: f64, du: f64, v: f64, fv: f64, dv: f64) -> f64 {
 /// Cubic minimizer variant that clamps the discriminant to `>= 0` (for the non-bracketed case) and falls back to `xmin`/`xmax` when the interpolant fails.
 #[inline]
 fn cubic_minimizer2(
-    u: f64, fu: f64, du: f64,
-    v: f64, fv: f64, dv: f64,
-    xmin: f64, xmax: f64,
+    u: f64,
+    fu: f64,
+    du: f64,
+    v: f64,
+    fv: f64,
+    dv: f64,
+    xmin: f64,
+    xmax: f64,
 ) -> f64 {
     let d = v - u;
     let theta = (fu - fv) * 3.0 / d + du + dv;
@@ -106,10 +119,17 @@ fn quad_minimizer2(u: f64, du: f64, v: f64, dv: f64) -> f64 {
 /// Reference: Moré & Thuente, "Line Search Algorithms with Guaranteed Sufficient Decrease,"
 /// ACM TOMS 20(3), 1994.
 pub fn update_trial_interval(
-    x: &mut f64, fx: &mut f64, dx: &mut f64,
-    y: &mut f64, fy: &mut f64, dy: &mut f64,
-    t: &mut f64, ft: &mut f64, dt: &mut f64,
-    tmin: f64, tmax: f64,
+    x: &mut f64,
+    fx: &mut f64,
+    dx: &mut f64,
+    y: &mut f64,
+    fy: &mut f64,
+    dy: &mut f64,
+    t: &mut f64,
+    ft: &mut f64,
+    dt: &mut f64,
+    tmin: f64,
+    tmax: f64,
     brackt: &mut i32,
 ) -> i32 {
     let bound;
@@ -345,12 +365,20 @@ pub fn line_search_backtracking_owlqn(
     loop {
         veccpy(x, xp);
         vecadd(x, s, *stp);
-        owlqn_project(x, wp, param.orthantwise_start as usize, param.orthantwise_end as usize);
+        owlqn_project(
+            x,
+            wp,
+            param.orthantwise_start as usize,
+            param.orthantwise_end as usize,
+        );
 
         *f = eval_fn(x, g, *stp);
 
-        let norm =
-            owlqn_x1norm(x, param.orthantwise_start as usize, param.orthantwise_end as usize);
+        let norm = owlqn_x1norm(
+            x,
+            param.orthantwise_start as usize,
+            param.orthantwise_end as usize,
+        );
         *f += norm * param.orthantwise_c;
 
         count += 1;
@@ -497,10 +525,18 @@ pub fn line_search_morethuente(
             let mut dgym = dgy - dgtest;
 
             uinfo = update_trial_interval(
-                &mut stx, &mut fxm, &mut dgxm,
-                &mut sty, &mut fym, &mut dgym,
-                stp, &mut fm, &mut dgm,
-                stmin, stmax, &mut brackt,
+                &mut stx,
+                &mut fxm,
+                &mut dgxm,
+                &mut sty,
+                &mut fym,
+                &mut dgym,
+                stp,
+                &mut fm,
+                &mut dgm,
+                stmin,
+                stmax,
+                &mut brackt,
             );
 
             fx = fxm + stx * dgtest;
@@ -509,10 +545,18 @@ pub fn line_search_morethuente(
             dgy = dgym + dgtest;
         } else {
             uinfo = update_trial_interval(
-                &mut stx, &mut fx, &mut dgx,
-                &mut sty, &mut fy, &mut dgy,
-                stp, f, &mut { dg },
-                stmin, stmax, &mut brackt,
+                &mut stx,
+                &mut fx,
+                &mut dgx,
+                &mut sty,
+                &mut fy,
+                &mut dgy,
+                stp,
+                f,
+                &mut { dg },
+                stmin,
+                stmax,
+                &mut brackt,
             );
         }
 

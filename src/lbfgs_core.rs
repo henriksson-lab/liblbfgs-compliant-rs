@@ -120,9 +120,8 @@ pub fn lbfgs_impl_safe(
 
     // Wrap evaluate: user's closure operates on original n elements,
     // but internally we work with zero-padded arrays of size np.
-    let mut eval_fn = |xp: &[f64], gp: &mut [f64], step: f64| -> f64 {
-        evaluate(&xp[..n], &mut gp[..n], step)
-    };
+    let mut eval_fn =
+        |xp: &[f64], gp: &mut [f64], step: f64| -> f64 { evaluate(&xp[..n], &mut gp[..n], step) };
 
     // --- Parameter validation ---
     if n_i32 <= 0 {
@@ -232,12 +231,19 @@ pub fn lbfgs_impl_safe(
 
     if param.orthantwise_c != 0.0 {
         let xnorm_l1 = owlqn_x1norm(
-            &xw, param.orthantwise_start as usize, param.orthantwise_end as usize,
+            &xw,
+            param.orthantwise_start as usize,
+            param.orthantwise_end as usize,
         );
         fx += xnorm_l1 * param.orthantwise_c;
         owlqn_pseudo_gradient(
-            &mut pg, &xw, &g, n, param.orthantwise_c,
-            param.orthantwise_start as usize, param.orthantwise_end as usize,
+            &mut pg,
+            &xw,
+            &g,
+            n,
+            param.orthantwise_c,
+            param.orthantwise_start as usize,
+            param.orthantwise_end as usize,
         );
     }
 
@@ -278,21 +284,53 @@ pub fn lbfgs_impl_safe(
 
         let ls = match ls_method {
             LineSearchMethod::MoreThuente => line_search_morethuente(
-                np, &mut xw, &mut fx, &mut g, &mut d, &mut step, &xp, &gp, &mut w,
-                &mut eval_fn, &param,
+                np,
+                &mut xw,
+                &mut fx,
+                &mut g,
+                &mut d,
+                &mut step,
+                &xp,
+                &gp,
+                &mut w,
+                &mut eval_fn,
+                &param,
             ),
             LineSearchMethod::Backtracking => line_search_backtracking(
-                np, &mut xw, &mut fx, &mut g, &mut d, &mut step, &xp, &gp, &mut w,
-                &mut eval_fn, &param,
+                np,
+                &mut xw,
+                &mut fx,
+                &mut g,
+                &mut d,
+                &mut step,
+                &xp,
+                &gp,
+                &mut w,
+                &mut eval_fn,
+                &param,
             ),
             LineSearchMethod::BacktrackingOwlqn => {
                 let ls = line_search_backtracking_owlqn(
-                    np, &mut xw, &mut fx, &mut g, &mut d, &mut step, &xp, &pg, &mut w,
-                    &mut eval_fn, &param,
+                    np,
+                    &mut xw,
+                    &mut fx,
+                    &mut g,
+                    &mut d,
+                    &mut step,
+                    &xp,
+                    &pg,
+                    &mut w,
+                    &mut eval_fn,
+                    &param,
                 );
                 owlqn_pseudo_gradient(
-                    &mut pg, &xw, &g, n, param.orthantwise_c,
-                    param.orthantwise_start as usize, param.orthantwise_end as usize,
+                    &mut pg,
+                    &xw,
+                    &g,
+                    n,
+                    param.orthantwise_c,
+                    param.orthantwise_start as usize,
+                    param.orthantwise_end as usize,
                 );
                 ls
             }
@@ -317,7 +355,10 @@ pub fn lbfgs_impl_safe(
             let report = crate::ProgressReport {
                 x: &xw[..n],
                 g: &g[..n],
-                fx, xnorm, gnorm, step,
+                fx,
+                xnorm,
+                gnorm,
+                step,
                 k: k as i32,
                 ls,
             };
