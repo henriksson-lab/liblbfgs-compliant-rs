@@ -57,6 +57,7 @@ fn cubic_minimizer(u: f64, fu: f64, du: f64, v: f64, fv: f64, dv: f64) -> f64 {
 
 /// Cubic minimizer variant that clamps the discriminant to `>= 0` (for the non-bracketed case) and falls back to `xmin`/`xmax` when the interpolant fails.
 #[inline]
+#[allow(clippy::too_many_arguments)]
 fn cubic_minimizer2(
     u: f64,
     fu: f64,
@@ -118,6 +119,7 @@ fn quad_minimizer2(u: f64, du: f64, v: f64, dv: f64) -> f64 {
 /// `LBFGSERR_OUTOFINTERVAL`, `LBFGSERR_INCREASEGRADIENT`, `LBFGSERR_INCORRECT_TMINMAX`.
 /// Reference: Moré & Thuente, "Line Search Algorithms with Guaranteed Sufficient Decrease,"
 /// ACM TOMS 20(3), 1994.
+#[allow(clippy::too_many_arguments)]
 pub fn update_trial_interval(
     x: &mut f64,
     fx: &mut f64,
@@ -180,12 +182,10 @@ pub fn update_trial_interval(
             } else {
                 newt = mq;
             }
+        } else if (*t - mc).abs() > (*t - mq).abs() {
+            newt = mc;
         } else {
-            if (*t - mc).abs() > (*t - mq).abs() {
-                newt = mc;
-            } else {
-                newt = mq;
-            }
+            newt = mq;
         }
     } else {
         bound = 0;
@@ -226,10 +226,8 @@ pub fn update_trial_interval(
             if mq2 < newt {
                 newt = mq2;
             }
-        } else {
-            if newt < mq2 {
-                newt = mq2;
-            }
+        } else if newt < mq2 {
+            newt = mq2;
         }
     }
 
@@ -249,6 +247,7 @@ pub fn update_trial_interval(
 /// otherwise returns a negative error code (`LBFGSERR_INVALIDPARAMETERS`,
 /// `LBFGSERR_INCREASEGRADIENT`, `LBFGSERR_MINIMUMSTEP`, `LBFGSERR_MAXIMUMSTEP`, or
 /// `LBFGSERR_MAXIMUMLINESEARCH`).
+#[allow(clippy::too_many_arguments)]
 pub fn line_search_backtracking(
     _n: usize,
     x: &mut [f64],
@@ -337,6 +336,7 @@ pub fn line_search_backtracking(
 /// halved on failure. Returns the number of evaluations on success or a negative error code
 /// (`LBFGSERR_INVALIDPARAMETERS`, `LBFGSERR_MINIMUMSTEP`, `LBFGSERR_MAXIMUMSTEP`,
 /// `LBFGSERR_MAXIMUMLINESEARCH`).
+#[allow(clippy::too_many_arguments)]
 pub fn line_search_backtracking_owlqn(
     n: usize,
     x: &mut [f64],
@@ -422,6 +422,7 @@ pub fn line_search_backtracking_owlqn(
 /// `LBFGSERR_WIDTHTOOSMALL`, or `LBFGSERR_MAXIMUMLINESEARCH`).
 /// Reference: Moré & Thuente, "Line Search Algorithms with Guaranteed Sufficient Decrease,"
 /// ACM TOMS 20(3):286–307, 1994.
+#[allow(clippy::too_many_arguments)]
 pub fn line_search_morethuente(
     _n: usize,
     x: &mut [f64],
@@ -475,11 +476,12 @@ pub fn line_search_morethuente(
             *stp = param.max_step;
         }
 
-        if (brackt != 0
-            && ((*stp <= stmin || stmax <= *stp)
+        if brackt != 0
+            && (*stp <= stmin
+                || stmax <= *stp
                 || param.max_linesearch <= count + 1
-                || uinfo != 0))
-            || (brackt != 0 && (stmax - stmin <= param.xtol * stmax))
+                || uinfo != 0
+                || stmax - stmin <= param.xtol * stmax)
         {
             *stp = stx;
         }

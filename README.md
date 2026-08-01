@@ -4,6 +4,7 @@ Faithful pure-Rust implementation of the [libLBFGS](https://github.com/chokkan/l
 
 The API is based on the code from https://github.com/messense/liblbfgs-sys, so this crate should be a drop-in replacement
 
+* 2026-08-01: CI added
 * 2026-05-23: Renewed audit, no serious issues found but SIMD disabled by default as better for reproducibility. Benchmark made more faithful
 * 2026-05-16: Appears to be a faithful translation
 
@@ -157,23 +158,25 @@ Returns `Ok(LbfgsResult)` with convergence type and final `fx`, or `Err(LbfgsErr
 
 ## Performance
 
-Measured against the vendored original C library on a dense logistic-regression workload.
-Both implementations were built as scalar optimized release binaries (`cc -O3` for C,
-`cargo build --release` for Rust), with the same deterministic data, initial weights,
-L-BFGS parameters, and 25-iteration cap. Lower is better.
+Original benchmark baseline: the vendored original C library is libLBFGS
+`1.10.0` (`1.10`).
 
-Workload: `200,000 x 512` dense `f64` feature matrix, 26 objective evaluations, about
-819 MB of feature data.
+Latest captured run: 2026-07-14, Rust commit `3920187`. Command:
+`cargo bench --features compare-c --bench compare_perf -- --nocapture`.
+The paired harness compares Rust and the vendored C implementation on
+deterministic Rosenbrock workloads. All reported objective values and final
+vectors matched exactly to the harness output. Aggregate speedup is **0.92x**
+(C time / Rust time; higher is better), so Rust was slightly slower in this
+run. The harness reports only process-level RSS (`28,160 KiB` in this capture),
+not separate Rust/C RSS values. Raw rows are tracked in
+`benchmarks/liblbfgs-compliant-rs.tsv` in the presentation repository.
 
-| Implementation | Iterations | Evaluations | Final fx | Checksum | Median wall time | Max RSS |
-|---|---:|---:|---:|---:|---:|---:|
-| Original C scalar | 25 | 26 | 3.088070060998e+02 | -1.599243887140e+03 | 5.65 s | 803,520 KB |
-| Rust scalar default | 25 | 26 | 3.088070060998e+02 | -1.599243887140e+03 | 5.63 s | 803,840 KB |
-
-On this run, the scalar Rust implementation followed the same numerical path as C and
-had effectively identical speed and memory use. SIMD is intentionally not included in
-this comparison because AVX/FMA changes floating-point rounding and can affect
-reproducibility.
+| N | Rust us | C us | Rust/C ratio | C/Rust speedup | fx abs error | max x abs error |
+|---:|---:|---:|---:|---:|---:|---:|
+| 10 | 15.8 | 15.0 | 1.05x | 0.95x | 0.00e0 | 0.00e0 |
+| 100 | 122.1 | 108.2 | 1.13x | 0.89x | 0.00e0 | 0.00e0 |
+| 1000 | 1331.5 | 1232.1 | 1.08x | 0.93x | 0.00e0 | 0.00e0 |
+| 10000 | 13444.9 | 12488.9 | 1.08x | 0.93x | 0.00e0 | 0.00e0 |
 
 ## Verifying against the C library
 

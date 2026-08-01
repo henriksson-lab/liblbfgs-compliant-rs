@@ -55,16 +55,15 @@ fn eval_logreg(data: &Data, lambda: f64, w: &[f64], g: &mut [f64]) -> f64 {
         }
 
         let yz = data.y[i] * dot;
-        let coeff;
-        if yz >= 0.0 {
+        let coeff = if yz >= 0.0 {
             let e = (-yz).exp();
             loss += e.ln_1p();
-            coeff = -data.y[i] * e / (1.0 + e);
+            -data.y[i] * e / (1.0 + e)
         } else {
             let e = yz.exp();
             loss += -yz + e.ln_1p();
-            coeff = -data.y[i] / (1.0 + e);
-        }
+            -data.y[i] / (1.0 + e)
+        };
 
         for j in 0..data.features {
             g[j] += coeff * row[j];

@@ -145,12 +145,11 @@ pub fn lbfgs_impl_safe(
     if param.ftol < 0.0 {
         return LBFGSERR_INVALID_FTOL;
     }
-    if param.linesearch == LBFGS_LINESEARCH_BACKTRACKING_WOLFE as i32
-        || param.linesearch == LBFGS_LINESEARCH_BACKTRACKING_STRONG_WOLFE as i32
+    if (param.linesearch == LBFGS_LINESEARCH_BACKTRACKING_WOLFE as i32
+        || param.linesearch == LBFGS_LINESEARCH_BACKTRACKING_STRONG_WOLFE as i32)
+        && (param.wolfe <= param.ftol || 1.0 <= param.wolfe)
     {
-        if param.wolfe <= param.ftol || 1.0 <= param.wolfe {
-            return LBFGSERR_INVALID_WOLFE;
-        }
+        return LBFGSERR_INVALID_WOLFE;
     }
     if param.gtol < 0.0 {
         return LBFGSERR_INVALID_GTOL;

@@ -18,10 +18,11 @@ mod owlqn;
 pub mod c_ffi;
 
 /// Line search algorithm selection.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
 pub enum LineSearch {
     /// `LBFGS_LINESEARCH_MORETHUENTE`: More-Thuente method satisfying strong
     /// Wolfe conditions (default).
+    #[default]
     MoreThuente,
     /// `LBFGS_LINESEARCH_BACKTRACKING_ARMIJO`: backtracking with the
     /// sufficient decrease (Armijo) condition only.
@@ -32,12 +33,6 @@ pub enum LineSearch {
     /// `LBFGS_LINESEARCH_BACKTRACKING_STRONG_WOLFE`: backtracking with
     /// sufficient decrease and strong curvature conditions.
     BacktrackingStrongWolfe,
-}
-
-impl Default for LineSearch {
-    fn default() -> Self {
-        LineSearch::MoreThuente
-    }
 }
 
 /// L1 (OWL-QN) regularization parameters.

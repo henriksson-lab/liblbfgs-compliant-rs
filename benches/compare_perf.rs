@@ -16,9 +16,7 @@ fn main() {
 
     fn rosenbrock_nd(x: &[f64], g: &mut [f64], _step: f64) -> f64 {
         let n = x.len();
-        for i in 0..n {
-            g[i] = 0.0;
-        }
+        g.fill(0.0);
         let mut f = 0.0;
         for i in (0..n - 1).step_by(2) {
             let t1 = 1.0 - x[i];
@@ -59,8 +57,8 @@ fn main() {
         unsafe {
             let x = c_ffi::lbfgs_malloc(n as c_int);
             let init = make_initial(n);
-            for i in 0..n {
-                *x.add(i) = init[i];
+            for (i, value) in init.iter().enumerate() {
+                *x.add(i) = *value;
             }
             let mut fx = 0.0f64;
             c_ffi::lbfgs(
@@ -73,8 +71,8 @@ fn main() {
                 std::ptr::null_mut(),
             );
             let mut result = vec![0.0; n];
-            for i in 0..n {
-                result[i] = *x.add(i);
+            for (i, value) in result.iter_mut().enumerate() {
+                *value = *x.add(i);
             }
             c_ffi::lbfgs_free(x);
             (fx, result)
@@ -99,8 +97,8 @@ fn main() {
             unsafe {
                 let x = c_ffi::lbfgs_malloc(n as c_int);
                 let init = make_initial(n);
-                for i in 0..n {
-                    *x.add(i) = init[i];
+                for (i, value) in init.iter().enumerate() {
+                    *x.add(i) = *value;
                 }
                 let mut fx = 0.0f64;
                 let start = Instant::now();

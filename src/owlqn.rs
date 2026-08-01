@@ -9,11 +9,7 @@
 /// Returns the contribution of the regularized variables to the OWL-QN
 /// objective, i.e. `sum_{i in [start, end)} |x[i]|`.
 pub fn owlqn_x1norm(x: &[f64], start: usize, end: usize) -> f64 {
-    let mut norm = 0.0;
-    for i in start..end {
-        norm += x[i].abs();
-    }
-    norm
+    x[start..end].iter().map(|value| value.abs()).sum()
 }
 
 /// Compute the OWL-QN pseudo-gradient `pg` from the raw gradient `g`.
@@ -32,27 +28,19 @@ pub fn owlqn_pseudo_gradient(
     start: usize,
     end: usize,
 ) {
-    for i in 0..start {
-        pg[i] = g[i];
-    }
+    pg[..start].copy_from_slice(&g[..start]);
     for i in start..end {
         if x[i] < 0.0 {
             pg[i] = g[i] - c;
-        } else if 0.0 < x[i] {
+        } else if 0.0 < x[i] || g[i] < -c {
             pg[i] = g[i] + c;
+        } else if c < g[i] {
+            pg[i] = g[i] - c;
         } else {
-            if g[i] < -c {
-                pg[i] = g[i] + c;
-            } else if c < g[i] {
-                pg[i] = g[i] - c;
-            } else {
-                pg[i] = 0.0;
-            }
+            pg[i] = 0.0;
         }
     }
-    for i in end..n {
-        pg[i] = g[i];
-    }
+    pg[end..n].copy_from_slice(&g[end..n]);
 }
 
 /// Project the search direction `d` onto the orthant defined by `sign`.

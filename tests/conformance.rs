@@ -52,9 +52,7 @@ fn rosenbrock_2d(x: &[f64], g: &mut [f64], _step: f64) -> f64 {
 /// Extended Rosenbrock N-D
 fn rosenbrock_nd(x: &[f64], g: &mut [f64], _step: f64) -> f64 {
     let n = x.len();
-    for i in 0..n {
-        g[i] = 0.0;
-    }
+    g.fill(0.0);
     let mut f = 0.0;
     for i in (0..n - 1).step_by(2) {
         let t1 = 1.0 - x[i];
@@ -98,8 +96,8 @@ fn test_rosenbrock_2d_armijo() {
     };
     let r = lbfgs(&mut x, quadratic, None, &param).unwrap();
     assert_f64!(r.fx, 0, "fx mismatch");
-    for i in 0..4 {
-        assert_eq!(x[i].to_bits(), 0, "x[{}] mismatch", i);
+    for (i, value) in x.iter().enumerate().take(4) {
+        assert_eq!(value.to_bits(), 0, "x[{}] mismatch", i);
     }
 }
 
@@ -163,13 +161,13 @@ fn test_rosenbrock_10d_default() {
     #[cfg(not(feature = "simd"))]
     assert_eq!(counter, 35, "iteration count mismatch");
     assert_f64!(r.fx, 4418965835762227741, "fx mismatch");
-    for i in 0..10 {
+    for (i, value) in x.iter().enumerate().take(10) {
         let expected = if i % 2 == 0 {
             4607182416870061669
         } else {
             4607182414854651967
         };
-        assert_f64!(x[i], expected, &format!("x[{}] mismatch", i));
+        assert_f64!(*value, expected, &format!("x[{}] mismatch", i));
     }
 }
 
@@ -182,8 +180,8 @@ fn test_quadratic_4d() {
     let mut x = vec![1.0, 2.0, 3.0, 4.0];
     let r = lbfgs(&mut x, quadratic, None, &LbfgsParam::default()).unwrap();
     assert_f64!(r.fx, 0, "fx mismatch");
-    for i in 0..4 {
-        assert_eq!(x[i].to_bits(), 0, "x[{}] mismatch", i);
+    for (i, value) in x.iter().enumerate().take(4) {
+        assert_eq!(value.to_bits(), 0, "x[{}] mismatch", i);
     }
 }
 
@@ -205,8 +203,8 @@ fn test_owlqn_basic() {
     };
     let r = lbfgs(&mut x, quadratic, None, &param).unwrap();
     assert_f64!(r.fx, 0, "fx mismatch");
-    for i in 0..4 {
-        assert_eq!(x[i].to_bits(), 0, "x[{}] mismatch", i);
+    for (i, value) in x.iter().enumerate().take(4) {
+        assert_eq!(value.to_bits(), 0, "x[{}] mismatch", i);
     }
 }
 
@@ -224,8 +222,8 @@ fn test_owlqn_partial_regularization() {
     };
     let r = lbfgs(&mut x, quadratic, None, &param).unwrap();
     assert_f64!(r.fx, 0, "fx mismatch");
-    for i in 0..4 {
-        assert_eq!(x[i].to_bits(), 0, "x[{}] mismatch", i);
+    for (i, value) in x.iter().enumerate().take(4) {
+        assert_eq!(value.to_bits(), 0, "x[{}] mismatch", i);
     }
 }
 
@@ -492,7 +490,7 @@ fn test_progress_cancellation() {
         &LbfgsParam::default(),
     );
     // Cancellation via progress callback returns Canceled
-    assert!(r.is_err() || matches!(r, Ok(_)));
+    assert!(matches!(r, Err(LbfgsError::Canceled)));
     assert_eq!(count, 3);
 }
 
@@ -636,8 +634,8 @@ mod compare_c {
         unsafe {
             let n = initial.len() as c_int;
             let x = c_ffi::lbfgs_malloc(n);
-            for i in 0..initial.len() {
-                *x.add(i) = initial[i];
+            for (i, value) in initial.iter().enumerate() {
+                *x.add(i) = *value;
             }
             let mut fx = 0.0f64;
             let p = match param {
@@ -646,8 +644,8 @@ mod compare_c {
             };
             let ret = c_ffi::lbfgs(n, x, &mut fx, eval, progress, instance, p);
             let mut result = vec![0.0; initial.len()];
-            for i in 0..initial.len() {
-                result[i] = *x.add(i);
+            for (i, value) in result.iter_mut().enumerate() {
+                *value = *x.add(i);
             }
             c_ffi::lbfgs_free(x);
             (ret, fx, result)
